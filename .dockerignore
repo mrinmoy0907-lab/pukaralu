@@ -1,0 +1,7 @@
+.venv
+var
+**/__pycache__
+frontend/node_modules
+frontend/dist
+frontend/public/cesium
+.git

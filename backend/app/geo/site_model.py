@@ -339,8 +339,9 @@ def build_site_model(
 
     # Split points for every corridor: endpoints of other corridors that touch
     # it, intersections, and gate projections.
-    split_d: dict[str, list[float]] = {c.id: [0.0, c.line.length] for c in corridors.values()}
-    clist = list(corridors.values())
+    # disabled (blocked) corridors are not part of the network at all
+    clist = [c for c in corridors.values() if c.enabled]
+    split_d: dict[str, list[float]] = {c.id: [0.0, c.line.length] for c in clist}
     for i, a in enumerate(clist):
         for b in clist[i + 1:]:
             inter = a.line.intersection(b.line)
@@ -363,7 +364,7 @@ def build_site_model(
             gate_attach[gt.id] = ("area", near_area[0].id)
             continue
         best = None
-        for c in corridors.values():
+        for c in clist:
             d = c.line.distance(gt.point)
             if d <= GATE_SNAP and (best is None or d < best[0]):
                 best = (d, c)
@@ -375,7 +376,7 @@ def build_site_model(
         gate_attach[gt.id] = ("corridor", best[1].id)
 
     link_id = 0
-    for c in corridors.values():
+    for c in clist:
         ds = sorted(set(round(d, 2) for d in split_d[c.id]))
         merged: list[float] = []
         for d in ds:

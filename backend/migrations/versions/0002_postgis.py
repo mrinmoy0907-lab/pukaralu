@@ -9,6 +9,7 @@ Revision ID: 0002
 Revises: 0001
 Create Date: 2026-10-13
 """
+import sqlalchemy as sa
 from alembic import op
 
 revision = "0002"
@@ -18,7 +19,13 @@ depends_on = None
 
 
 def upgrade() -> None:
-    if op.get_bind().dialect.name != "postgresql":
+    bind = op.get_bind()
+    if bind.dialect.name != "postgresql":
+        return
+    available = bind.execute(sa.text("SELECT 1 FROM pg_available_extensions WHERE name = 'postgis'")).first()
+    if not available:
+        # Plain PostgreSQL: the application still works (GeoJSON columns, Shapely spatial filters).
+        print("WARNING: PostGIS extension not available - spatial index and geom column not created")
         return
     op.execute("CREATE EXTENSION IF NOT EXISTS postgis")
     op.execute("ALTER TABLE features ADD COLUMN geom geometry(Geometry, 4326)")
@@ -47,7 +54,10 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    if op.get_bind().dialect.name != "postgresql":
+    bind = op.get_bind()
+    if bind.dialect.name != "postgresql":
+        return
+    if not bind.execute(sa.text("SELECT 1 FROM information_schema.columns WHERE table_name='features' AND column_name='geom'")).first():
         return
     op.execute("DROP VIEW IF EXISTS v_site_features")
     op.execute("DROP TRIGGER IF EXISTS trg_features_geom ON features")

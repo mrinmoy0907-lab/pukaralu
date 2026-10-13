@@ -1,0 +1,47 @@
+# docker compose up --build            -> app on http://localhost:8000 (API docs at /docs)
+# docker compose --profile gis up      -> additionally GeoServer on http://localhost:8080/geoserver
+services:
+  db:
+    image: postgis/postgis:16-3.4
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-pushkaralu}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pushkaralu}
+      POSTGRES_DB: ${POSTGRES_DB:-pushkaralu}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-pushkaralu}"]
+      interval: 5s
+      retries: 20
+
+  app:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PK_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-pushkaralu}:${POSTGRES_PASSWORD:-pushkaralu}@db:5432/${POSTGRES_DB:-pushkaralu}
+      PK_RESULTS_DIR: /data/results
+      PK_UPLOAD_DIR: /data/uploads
+      PK_MAX_WORKERS: ${PK_MAX_WORKERS:-2}
+      PK_CORS_ORIGINS: http://localhost:8000
+    volumes:
+      - results:/data
+    ports:
+      - "8000:8000"
+
+  geoserver:
+    profiles: ["gis"]
+    image: docker.osgeo.org/geoserver:2.26.1
+    environment:
+      GEOSERVER_ADMIN_PASSWORD: ${GEOSERVER_ADMIN_PASSWORD:-geoserver}
+    ports:
+      - "8080:8080"
+    depends_on:
+      - db
+
+volumes:
+  pgdata:
+  results:

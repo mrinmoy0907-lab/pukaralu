@@ -16,7 +16,6 @@ import pyogrio
 import shapely
 from pyproj import CRS, Transformer
 from shapely.geometry import mapping
-from shapely.ops import transform
 
 from ..geo.catalog import FEATURE_TYPES
 
@@ -85,10 +84,10 @@ def read_vector(path: Path, *, layer: str | None = None, pk_type: str | None = N
         if g.is_empty:
             rejected += 1
             continue
-        if to_wgs is not None:
-            g = transform(to_wgs.transform, g)
         if g.has_z:
             g = shapely.force_2d(g)
+        if to_wgs is not None:
+            g = shapely.transform(g, lambda xy: np.column_stack(to_wgs.transform(xy[:, 0], xy[:, 1])))
         props = {}
         for f, arr in cols.items():
             v = arr[i]
@@ -141,9 +140,9 @@ def read_dem(path: Path, bounds_lonlat: tuple[float, float, float, float], size:
         tr = Transformer.from_crs("EPSG:4326", ds.crs, always_xy=True)
         X, Y = tr.transform(LON.ravel(), LAT.ravel())
         inv = ~ds.transform
-        cols, rows = inv * (np.asarray(X), np.asarray(Y))
-        cols = np.asarray(cols) - 0.5
-        rows = np.asarray(rows) - 0.5
+        X, Y = np.asarray(X), np.asarray(Y)
+        cols = inv.a * X + inv.b * Y + inv.c - 0.5
+        rows = inv.d * X + inv.e * Y + inv.f - 0.5
         c0 = np.clip(np.floor(cols).astype(int), 0, ds.width - 1)
         r0 = np.clip(np.floor(rows).astype(int), 0, ds.height - 1)
         c1 = np.clip(c0 + 1, 0, ds.width - 1)
@@ -158,7 +157,7 @@ def read_dem(path: Path, bounds_lonlat: tuple[float, float, float, float], size:
         if np.isnan(z).all():
             raise ImportErrorWithDetail("the DEM does not overlap the site")
         fill = float(np.nanmin(z))
-        z = np.where(np.isnan(z), fill, z)
+        z = np.where(np.isnan(z), fill, z).reshape(size, size)
         return {
             "west": west, "south": south, "east": east, "north": north, "width": size, "height": size,
             "heights": np.round(z, 2).tolist(), "min": float(z.min()), "max": float(z.max()),

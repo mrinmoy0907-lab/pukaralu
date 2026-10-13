@@ -1,0 +1,17 @@
+# Runtime dependencies (tested with Python 3.11-3.13). Licences: see docs/LICENSES.md
+fastapi==0.143.0
+uvicorn[standard]==0.54.0
+pydantic==2.14.1
+pydantic-settings==2.15.0
+python-multipart==0.0.32
+SQLAlchemy==2.1.4
+alembic==1.20.0
+psycopg[binary]==3.3.6
+jupedsim==1.4.2
+shapely==2.2.0
+pyproj==3.8.0
+networkx==3.7
+numpy==2.5.4
+pyogrio==0.13.0
+rasterio==1.5.2
+reportlab==5.0.1

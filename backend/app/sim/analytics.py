@@ -53,7 +53,9 @@ def _wait_from_curves(times, arrivals_cum, entered_cum):
     return (float(np.mean(waits)) if waits else 0.0, float(np.max(waits)) if waits else 0.0)
 
 
-def _clusters(mask: np.ndarray) -> list[list[tuple[int, int]]]:
+def _clusters(mask: np.ndarray, reach: int = 2) -> list[list[tuple[int, int]]]:
+    """Group cells above the limit; cells within ``reach`` cells of each other form one
+    bottleneck (corridors are often interrupted by partly walkable grid cells)."""
     seen = np.zeros_like(mask, bool)
     out = []
     ny, nx = mask.shape
@@ -66,7 +68,7 @@ def _clusters(mask: np.ndarray) -> list[list[tuple[int, int]]]:
         while dq:
             y, x = dq.popleft()
             comp.append((y, x))
-            for dy, dx in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+            for dy, dx in [(a, b) for a in range(-reach, reach + 1) for b in range(-reach, reach + 1) if a or b]:
                 yy, xx = y + dy, x + dx
                 if 0 <= yy < ny and 0 <= xx < nx and mask[yy, xx] and not seen[yy, xx]:
                     seen[yy, xx] = True

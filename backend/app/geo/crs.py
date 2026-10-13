@@ -12,9 +12,9 @@ from dataclasses import dataclass
 
 import numpy as np
 from pyproj import CRS, Transformer
+import shapely
 from shapely.geometry import shape
 from shapely.geometry.base import BaseGeometry
-from shapely.ops import transform
 
 
 def local_crs(lon0: float, lat0: float) -> CRS:
@@ -40,10 +40,18 @@ class LocalProjection:
     def to_local(self, geom: BaseGeometry | dict) -> BaseGeometry:
         if isinstance(geom, dict):
             geom = shape(geom)
-        return transform(self._fwd.transform, geom)
+        return self._apply(self._fwd, geom)
 
     def to_wgs84(self, geom: BaseGeometry) -> BaseGeometry:
-        return transform(self._inv.transform, geom)
+        return self._apply(self._inv, geom)
+
+    @staticmethod
+    def _apply(tr: Transformer, geom: BaseGeometry) -> BaseGeometry:
+        def f(xy):
+            x, y = tr.transform(xy[:, 0], xy[:, 1])
+            return np.column_stack([x, y])
+
+        return shapely.transform(geom, f)
 
     def xy_to_lonlat(self, x, y):
         lon, lat = self._inv.transform(np.asarray(x, dtype=float), np.asarray(y, dtype=float))

@@ -14,6 +14,9 @@ Method (documented in docs/MODELS.md):
   composition proportional to the commodities present (FIFO mixing).
 * Nodes: demand-proportional merge and FIFO diverge (a link's outflow is
   limited by its most restrictive downstream target).
+* The two directions of a two-way corridor share the jam storage of each cell
+  (counterflow cannot exceed jam density); each direction keeps the full-width
+  flow capacity.
 * Areas (holding areas, ghats, plazas ...) are reservoirs: pedestrians who dwell
   there are stored up to a storage limit (0.8 x jam density x usable area) and
   leave at rate N/dwell (first-order, i.e. exponentially distributed dwell).
@@ -110,6 +113,10 @@ class CTMEngine:
             centres = np.array([lk.geom.interpolate((i + 0.5) * dx).coords[0] for i in range(n)])
             links[lk.id] = LinkState(lk.id, n, dx, lk.width, vf, lk.capacity_pps, np.zeros((n, P)), centres,
                                      _cell_points(lk.geom, n, dx, lk.width))
+        # opposite direction of two-way corridors: they share the physical storage (jam density)
+        by_end = {(lk.u, lk.v): lk.id for lk in model.links.values()}
+        opposite = {lid: by_end.get((model.links[lid].v, model.links[lid].u)) for lid in links}
+        opposite = {a: b for a, b in opposite.items() if b is not None and links[b].n == links[a].n}
         out_links: dict[int, list[int]] = {n: [] for n in model.nodes}
         in_links: dict[int, list[int]] = {n: [] for n in model.nodes}
         for lk in model.links.values():
@@ -192,8 +199,17 @@ class CTMEngine:
         area_pts: dict[int, np.ndarray] = {}
         for node, a in area_of_node.items():
             usable = a.polygon.intersection(model.walkable)
-            pts = _grid_points(usable, 60)
-            area_pts[node] = pts
+            # at least ~2 sample points per density-grid cell so area populations map uniformly
+            n_pts = int(min(20000, max(60, 2 * usable.area / grid.cell ** 2)))
+            area_pts[node] = _grid_points(usable, n_pts)
+        # connector links inside areas converge on the area's centre point; for density
+        # mapping their contents are added to the area(s) they belong to and spread uniformly
+        area_link_share: dict[int, list[int]] = {}
+        for lk in model.links.values():
+            if lk.kind == "area":
+                owners = [n for n in (lk.u, lk.v) if n in area_pts and len(area_pts[n])]
+                if owners:
+                    area_link_share[lk.id] = owners
         sec_links = _section_links(model)
         sec_acc: dict[str, float] = {cid: 0.0 for cid in sec_links}
 
@@ -226,28 +242,35 @@ class CTMEngine:
             xs, ys, ws = [], [], []
             congested = 0.0
             dens_links = []
-            for ls in links.values():
+            extra: dict[int, float] = {}
+            for lid, ls in links.items():
                 tot = ls.N.sum(1)
-                m = ls.pts.shape[1]
-                xs.append(ls.pts[:, :, 0].ravel())
-                ys.append(ls.pts[:, :, 1].ravel())
-                ws.append(np.repeat(tot / m, m))
                 k = tot / (ls.width * ls.dx)
                 kc = (ls.q / ls.width) / ls.vf if ls.q > 0 else 0
                 congested += float(tot[k > max(kc, 0.5)].sum())
                 dens_links.append(round(float(k.mean()), 3))
+                owners = area_link_share.get(lid)
+                if owners:
+                    for n_ in owners:
+                        extra[n_] = extra.get(n_, 0.0) + float(tot.sum()) / len(owners)
+                    continue
+                m = ls.pts.shape[1]
+                xs.append(ls.pts[:, :, 0].ravel())
+                ys.append(ls.pts[:, :, 1].ravel())
+                ws.append(np.repeat(tot / m, m))
             for node, pts in area_pts.items():
                 n_here = float(reservoir_by_c.get(node, np.zeros(1)).sum() + node_queue.get(node, np.zeros(1)).sum())
-                if n_here > 0 and len(pts):
-                    xs.append(pts[:, 0])
-                    ys.append(pts[:, 1])
-                    ws.append(np.full(len(pts), n_here / len(pts)))
+                n_here += extra.get(node, 0.0)
+                # always include the points (weight 0 when empty) so the point set is static
+                xs.append(pts[:, 0])
+                ys.append(pts[:, 1])
+                ws.append(np.full(len(pts), n_here / len(pts) if len(pts) else 0.0))
                 congested += float(node_queue.get(node, np.zeros(1)).sum())
             x = np.concatenate(xs) if xs else np.zeros(0)
             y = np.concatenate(ys) if ys else np.zeros(0)
             w = np.concatenate(ws) if ws else np.zeros(0)
             flows = {cid: sec_acc[cid] for cid in sec_acc}
-            rec.record_frame(t, x, y, weights=w, section_flow=flows)
+            rec.record_frame(t, x, y, weights=w, section_flow=flows, static_points=True)
             for cid in sec_acc:
                 sec_acc[cid] = 0.0
             queued_series.append(round(congested, 2))
@@ -329,10 +352,12 @@ class CTMEngine:
                 tot = ls.N.sum(1)
                 ratio = min(1.0, ls.vf * dt / ls.dx)
                 S[lid] = np.minimum(tot * ratio, ls.q * dt)
+                opp = opposite.get(lid)
+                occupied = tot + (links[opp].N.sum(1)[::-1] if opp is not None else 0.0)
                 kc = (ls.q / ls.width) / ls.vf if ls.q > 0 else 0.0
                 w = ls.q / (ls.width * max(JAM_DENSITY - kc, 0.1)) if ls.q > 0 else 0.0
                 alpha = min(1.0, w * dt / ls.dx)
-                R[lid] = np.minimum(ls.q * dt, alpha * np.maximum(ls.njam - tot, 0.0))
+                R[lid] = np.minimum(ls.q * dt, alpha * np.maximum(ls.njam - occupied, 0.0))
             closed_links = {lk.id for lk in model.links.values() if lk.corridor_id in closed}
             for lid in closed_links:  # closed corridors accept nobody new
                 R[lid][0] = 0.0
@@ -624,7 +649,7 @@ def _fit2(m: np.ndarray, n: int) -> np.ndarray:
 def _cell_points(geom, n: int, dx: float, width: float) -> np.ndarray:
     """Points spread along and across each cell (used only for density mapping)."""
     m_across = int(min(7, max(1, round(width / 1.5))))
-    m_along = 2
+    m_along = 1
     offs = (np.arange(m_across) + 0.5) / m_across - 0.5
     out = np.zeros((n, m_across * m_along, 2))
     L = geom.length

@@ -21,7 +21,10 @@ router = APIRouter(prefix="/api", tags=["meta"])
 
 @router.get("/health")
 def health():
-    return {"ok": True, "version": APP_VERSION, "database": "postgis" if is_postgis() else "sqlite"}
+    from ..db import engine
+
+    dialect = engine().dialect.name
+    return {"ok": True, "version": APP_VERSION, "database": "postgis" if is_postgis() else dialect}
 
 
 @router.get("/meta")

@@ -77,6 +77,7 @@ class Recorder:
     max_grid: np.ndarray | None = None
     above_grid: np.ndarray | None = None
     _prev: dict | None = None
+    _static: tuple | None = None
 
     def __post_init__(self):
         self._zones = []
@@ -93,15 +94,26 @@ class Recorder:
         self.max_grid = np.zeros((self.grid.ny, self.grid.nx))
         self.above_grid = np.zeros((self.grid.ny, self.grid.nx))
 
-    def record_frame(self, t: float, x, y, weights=None, ids=None, section_flow: dict | None = None):
+    def record_frame(self, t: float, x, y, weights=None, ids=None, section_flow: dict | None = None,
+                     static_points: bool = False):
+        """Record one output frame. ``static_points`` means x/y are the same sample
+        points every frame (macroscopic model), so zone membership is computed once."""
         x = np.asarray(x, dtype=float)
         y = np.asarray(y, dtype=float)
         w = np.ones_like(x) if weights is None else np.asarray(weights, dtype=float)
         self.times.append(round(float(t), 3))
         self.total.append(float(w.sum()))
-        for zid, geom in self._zones:
-            inside = shapely.contains_xy(geom, x, y) if len(x) else np.zeros(0, bool)
-            self.zone_counts[zid].append(float(w[inside].sum()))
+        if static_points:
+            if self._static is None or self._static[0] != len(x):
+                masks = {zid: shapely.contains_xy(geom, x, y) for zid, geom in self._zones}
+                self._static = (len(x), masks)
+            masks = self._static[1]
+            for zid, _geom in self._zones:
+                self.zone_counts[zid].append(float(w[masks[zid]].sum()))
+        else:
+            for zid, geom in self._zones:
+                inside = shapely.contains_xy(geom, x, y) if len(x) else np.zeros(0, bool)
+                self.zone_counts[zid].append(float(w[inside].sum()))
         counts = self.grid.counts(x, y, w)
         dens = self.grid.density(counts)
         np.maximum(self.max_grid, dens, out=self.max_grid)

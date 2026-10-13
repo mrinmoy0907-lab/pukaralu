@@ -43,8 +43,23 @@ def get_db() -> Iterator[Session]:
         db.close()
 
 
+_postgis: bool | None = None
+
+
 def is_postgis() -> bool:
-    return engine().dialect.name == "postgresql"
+    """True when the database is PostgreSQL with the PostGIS geom column installed."""
+    global _postgis
+    if _postgis is None:
+        eng = engine()
+        if eng.dialect.name != "postgresql":
+            _postgis = False
+        else:
+            from sqlalchemy import text
+
+            with eng.connect() as c:
+                _postgis = c.execute(text("SELECT 1 FROM information_schema.columns "
+                                          "WHERE table_name='features' AND column_name='geom'")).first() is not None
+    return _postgis
 
 
 def migrate() -> None:
@@ -61,8 +76,9 @@ def migrate() -> None:
 
 def reset_engine() -> None:
     """Used by tests to point the app at a fresh database."""
-    global _engine, _Session
+    global _engine, _Session, _postgis
     if _engine is not None:
         _engine.dispose()
     _engine = None
     _Session = None
+    _postgis = None
