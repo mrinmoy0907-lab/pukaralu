@@ -57,6 +57,7 @@ code { font-family: ui-monospace, monospace; font-size: 11px; color: #9fd0ff; }
 .cesium-wrap, .plan-wrap { position: relative; flex: 1; min-width: 0; height: 100%; }
 .cesium-container, .plan-map { position: absolute; inset: 0; }
 .plan-map { background: #dfe3e8; }
+.plan-wrap .view-badges { left: 44px; }
 .split { display: flex; flex: 1; gap: 2px; background: #000; }
 .split .cesium-wrap { flex: 1; }
 .view-badges { position: absolute; top: 8px; left: 8px; display: flex; gap: 6px; flex-wrap: wrap; pointer-events: none; z-index: 5; }

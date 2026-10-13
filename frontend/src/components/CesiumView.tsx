@@ -1,6 +1,6 @@
 import * as Cesium from "cesium";
-import { useEffect, useMemo, useRef } from "react";
-import { BAND_COLOURS, LAYER_GROUPS, POINT_SYMBOL, TYPE_STYLE, bandIndex, hexToRgb } from "../lib/colors";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { BAND_COLOURS, LAYER_GROUPS, POINT_SYMBOL, TYPE_STYLE, bandIndex } from "../lib/colors";
 import { denseFrame, fmtTime, frameIndex } from "../lib/replay";
 import { sampleHeight, tileHeights } from "../lib/terrain";
 import { useStore } from "../store";
@@ -64,7 +64,9 @@ export default function CesiumView({ runId, syncId, title }: Props) {
   const overlayDs = useRef<Cesium.CustomDataSource | null>(null);
   const points = useRef<Cesium.PointPrimitiveCollection | null>(null);
   const pointById = useRef<Map<number, Cesium.PointPrimitive>>(new Map());
-  const densityEntity = useRef<Cesium.Entity | null>(null);
+  const densityPrim = useRef<Cesium.Primitive | null>(null);
+  const densityCells = useRef<number[]>([]);
+  const [primTick, setPrimTick] = useState(0);
   const linkEntities = useRef<{ entity: Cesium.Entity; members: number[] }[]>([]);
   const timeLabel = useRef<HTMLDivElement>(null);
   const hovering = useRef(false);
@@ -312,7 +314,11 @@ export default function CesiumView({ runId, syncId, title }: Props) {
     if (!ds || !viewer) return;
     ds.entities.removeAll();
     linkEntities.current = [];
-    densityEntity.current = null;
+    if (densityPrim.current) {
+      viewer.scene.primitives.remove(densityPrim.current);
+      densityPrim.current = null;
+      densityCells.current = [];
+    }
     if (overlays.network && network) {
       for (const f of network.features) {
         if (f.properties.kind === "link") {
@@ -341,16 +347,52 @@ export default function CesiumView({ runId, syncId, title }: Props) {
     if (runData) {
       const g = runData.grid.grid;
       if (overlays.density) {
-        const canvas = document.createElement("canvas");
-        canvas.width = g.nx;
-        canvas.height = g.ny;
-        densityEntity.current = ds.entities.add({
-          rectangle: {
-            coordinates: Cesium.Rectangle.fromDegrees(g.west, g.south, g.east, g.north),
-            material: new Cesium.ImageMaterialProperty({ image: canvas, transparent: true }),
-            classificationType: Cesium.ClassificationType.TERRAIN,
-          },
-        });
+        // one rectangle per walkable grid cell, draped 0.3 m above the terrain at the cell
+        // centre; colours are per-instance attributes updated every frame (portable WebGL)
+        const wa = runData.grid.walk_area;
+        const dlon = (g.east - g.west) / g.nx;
+        const dlat = (g.north - g.south) / g.ny;
+        const minArea = 0.15 * g.cell_m * g.cell_m;
+        const cells: number[] = [];
+        const instances: Cesium.GeometryInstance[] = [];
+        for (let i = 0; i < g.nx * g.ny; i++) {
+          if (wa && wa[i] < minArea) continue;
+          const iy = Math.floor(i / g.nx);
+          const ix = i % g.nx;
+          cells.push(i);
+          instances.push(
+            new Cesium.GeometryInstance({
+              id: `d:${i}`,
+              geometry: new Cesium.RectangleGeometry({
+                rectangle: Cesium.Rectangle.fromDegrees(g.west + ix * dlon, g.south + iy * dlat, g.west + (ix + 1) * dlon, g.south + (iy + 1) * dlat),
+                height: sampleHeight(terrain, g.west + (ix + 0.5) * dlon, g.south + (iy + 0.5) * dlat) + 0.3,
+                vertexFormat: Cesium.PerInstanceColorAppearance.FLAT_VERTEX_FORMAT,
+              }),
+              attributes: {
+                color: Cesium.ColorGeometryInstanceAttribute.fromColor(Cesium.Color.TRANSPARENT),
+                show: new Cesium.ShowGeometryInstanceAttribute(false),
+              },
+            }),
+          );
+        }
+        if (instances.length) {
+          densityPrim.current = viewer.scene.primitives.add(
+            new Cesium.Primitive({
+              geometryInstances: instances,
+              appearance: new Cesium.PerInstanceColorAppearance({ flat: true, translucent: true }),
+              asynchronous: false,
+            }),
+          );
+          densityCells.current = cells;
+          if (import.meta.env.DEV) (window as any).__pkDensity = { prim: densityPrim.current, cells };
+          // repaint once the primitive has been built
+          const iv = window.setInterval(() => {
+            if (!densityPrim.current || densityPrim.current.ready) {
+              window.clearInterval(iv);
+              setPrimTick((x) => x + 1);
+            }
+          }, 250);
+        }
       }
       if (overlays.flows && runData.links) {
         // two directions of a corridor share geometry; show the summed density
@@ -430,31 +472,19 @@ export default function CesiumView({ runId, syncId, title }: Props) {
       for (const [id, p] of pointById.current) if (!seen.has(id)) p.show = false;
     }
     // density grid
-    const de = densityEntity.current;
-    if (de && overlays.density) {
+    const prim = densityPrim.current;
+    if (prim && prim.ready && overlays.density) {
       const g = runData.grid;
-      const fi = frameIndex(g.times, time);
-      const dense = denseFrame(g, g.frames[fi]);
-      const canvas = document.createElement("canvas");
-      canvas.width = g.grid.nx;
-      canvas.height = g.grid.ny;
-      const ctx = canvas.getContext("2d")!;
-      const img = ctx.createImageData(g.grid.nx, g.grid.ny);
-      const rgb = BAND_COLOURS.map(hexToRgb);
-      for (let iy = 0; iy < g.grid.ny; iy++) {
-        for (let ix = 0; ix < g.grid.nx; ix++) {
-          const v = dense[iy * g.grid.nx + ix];
-          if (v < 0.05) continue;
-          const [r, gg, b] = rgb[bandIndex(v, bands)];
-          const o = ((g.grid.ny - 1 - iy) * g.grid.nx + ix) * 4;
-          img.data[o] = r;
-          img.data[o + 1] = gg;
-          img.data[o + 2] = b;
-          img.data[o + 3] = 170;
-        }
+      const dense = denseFrame(g, g.frames[frameIndex(g.times, time)]);
+      const cols = BAND_COLOURS.map((c) => Cesium.Color.fromCssColorString(c).withAlpha(0.85));
+      for (const i of densityCells.current) {
+        const v = dense[i];
+        const attrs = prim.getGeometryInstanceAttributes(`d:${i}`);
+        if (!attrs) continue;
+        const show = v >= 0.05;
+        attrs.show = Cesium.ShowGeometryInstanceAttribute.toValue(show, attrs.show);
+        if (show) attrs.color = Cesium.ColorGeometryInstanceAttribute.toValue(cols[bandIndex(v, bands)], attrs.color);
       }
-      ctx.putImageData(img, 0, 0);
-      (de.rectangle!.material as Cesium.ImageMaterialProperty).image = new Cesium.ConstantProperty(canvas);
     }
     // macroscopic link densities
     if (runData.links && linkEntities.current.length) {
@@ -467,7 +497,7 @@ export default function CesiumView({ runId, syncId, title }: Props) {
         le.entity.polyline!.material = new Cesium.ColorMaterialProperty(col);
       }
     }
-  }, [time, runData, overlays, bands, terrain]);
+  }, [time, runData, overlays, bands, terrain, primTick]);
 
   return (
     <div

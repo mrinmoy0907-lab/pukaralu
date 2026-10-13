@@ -199,9 +199,9 @@ class CTMEngine:
         area_pts: dict[int, np.ndarray] = {}
         for node, a in area_of_node.items():
             usable = a.polygon.intersection(model.walkable)
-            # at least ~2 sample points per density-grid cell so area populations map uniformly
-            n_pts = int(min(20000, max(60, 2 * usable.area / grid.cell ** 2)))
-            area_pts[node] = _grid_points(usable, n_pts)
+            # 2x2 sample points per density-grid cell, aligned with the grid, so area
+            # populations map uniformly (no aliasing stripes)
+            area_pts[node] = _aligned_points(usable, grid)
         # connector links inside areas converge on the area's centre point; for density
         # mapping their contents are added to the area(s) they belong to and spread uniformly
         area_link_share: dict[int, list[int]] = {}
@@ -669,12 +669,14 @@ def _cell_points(geom, n: int, dx: float, width: float) -> np.ndarray:
     return out
 
 
-def _grid_points(poly, n: int) -> np.ndarray:
+def _aligned_points(poly, grid: Grid) -> np.ndarray:
     if poly.is_empty:
         return np.zeros((0, 2))
     minx, miny, maxx, maxy = poly.bounds
-    k = max(2, int(math.sqrt(n * (maxx - minx) * (maxy - miny) / max(poly.area, 1.0))) + 1)
-    xs, ys = np.meshgrid(np.linspace(minx, maxx, k + 2)[1:-1], np.linspace(miny, maxy, k + 2)[1:-1])
+    h = grid.cell / 2.0
+    i0, i1 = int((minx - grid.x0) // h), int((maxx - grid.x0) // h) + 1
+    j0, j1 = int((miny - grid.y0) // h), int((maxy - grid.y0) // h) + 1
+    xs, ys = np.meshgrid(grid.x0 + (np.arange(i0, i1) + 0.5) * h, grid.y0 + (np.arange(j0, j1) + 0.5) * h)
     xs, ys = xs.ravel(), ys.ravel()
     inside = shapely.contains_xy(poly, xs, ys)
     pts = np.stack([xs[inside], ys[inside]], 1)

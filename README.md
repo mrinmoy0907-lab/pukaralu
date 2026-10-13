@@ -17,7 +17,13 @@ compare alternatives, and export CSV/PDF/GeoJSON outputs for SOP drafting and dr
 > Godavari river polygon near Rajahmundry (ODbL). No real ghat geometry is
 > invented or presented as surveyed. See [docs/DATA_REPLACEMENT.md](docs/DATA_REPLACEMENT.md).
 
-![layout](docs/img/screenshot-3d.png)
+| 3D operational view (agent-based, peak arrivals) | Synchronised comparison |
+|---|---|
+| ![3D](docs/img/screenshot-3d.png) | ![compare](docs/img/screenshot-compare.png) |
+| **Macroscopic evacuation (computed corridor flows)** | **2D planning map** |
+| ![evacuation](docs/img/screenshot-evacuation-ctm.png) | ![2D](docs/img/screenshot-2d.png) |
+
+All screenshots show the SYNTHETIC demonstration site and simulated estimates.
 
 ## What it does
 
@@ -73,6 +79,20 @@ The image builds the frontend and serves it from FastAPI. (The Docker setup is
 provided but could not be executed in the environment this prototype was built
 in; the API test-suite was run against SQLite and against a real PostgreSQL 16
 server without the PostGIS extension.)
+
+## Measured on the demo site (4-core container, synthetic data)
+
+| Preset | Method | Population | Runtime | Notes |
+|---|---|---|---|---|
+| Normal (1 200 s) | agent-based | 1 693 peak | 97 s | no bottlenecks |
+| Peak bathing (1 200 s) | agent-based | 5 214 peak | 375 s | 2 unresolved bottlenecks, 4.9 p/m² max |
+| Evacuation (900 s) | agent-based | 6 103 | 918 s | **not cleared** in 840 s after trigger (3 784 out) |
+| Evacuation (900 s) | macroscopic CTM | 6 088 | 6 s | cleared in 655 s |
+
+The two evacuation estimates differ substantially: the CTM gives each direction
+of a two-way corridor full capacity and has no local jamming at merges, so it
+is optimistic. This is why every result carries its method label and why
+simulated clearance times alone must not be used to call a plan safe.
 
 ## Tests
 

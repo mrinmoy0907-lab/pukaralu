@@ -113,5 +113,10 @@ every report; set and approve values in **Method & limits**.
 * Stairs are represented by speed factors, not 3D step geometry; terrain is used for display only.
 * Capacity reductions during evacuation affect the CTM and CCRP; in agent-based
   runs physical narrowing must be modelled with a corridor width override.
-* Agent-based runs of very large crowds are slow (≈ 2 000 agents run at roughly
-  real-time ×4 on one core); use the macroscopic model for site-wide demand.
+* Agent-based runs of large crowds are slow: on the demo site ~1 700 agents
+  simulate 1 200 s in ~100 s, ~5 200 agents in ~375 s, and a 6 100-agent
+  evacuation takes about real time (one core per run). Use the macroscopic
+  model for site-wide demand and the agent-based model for local hotspots.
+* On the demo evacuation the macroscopic model cleared in 655 s while the
+  agent-based model had not cleared after 840 s — treat CTM clearance times as
+  optimistic.

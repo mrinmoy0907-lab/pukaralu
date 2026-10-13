@@ -31,8 +31,9 @@ export function decimation(nFrames: number, maxFrames: number): number {
 
 export function fmtTime(s: number | null | undefined): string {
   if (s === null || s === undefined || Number.isNaN(s)) return "–";
-  const m = Math.floor(s / 60);
-  const sec = Math.round(s - m * 60);
+  const total = Math.round(s);
+  const m = Math.floor(total / 60);
+  const sec = total - m * 60;
   return m > 0 ? `${m}m ${String(sec).padStart(2, "0")}s` : `${sec}s`;
 }
 

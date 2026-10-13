@@ -271,6 +271,7 @@ export interface GridDoc {
   frames: [number[], number[]][];
   max: [number[], number[]];
   above_s: [number[], number[]];
+  walk_area?: number[];
 }
 
 export interface AgentFrame {
