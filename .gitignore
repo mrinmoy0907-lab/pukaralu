@@ -1,0 +1,13 @@
+.venv/
+var/
+__pycache__/
+*.pyc
+.pytest_cache/
+node_modules/
+frontend/dist/
+frontend/public/cesium/
+.env
+*.egg-info/
+.ruff_cache/
+playwright-report/
+test-results/
