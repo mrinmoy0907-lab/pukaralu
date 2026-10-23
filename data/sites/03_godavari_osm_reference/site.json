@@ -1,0 +1,8 @@
+{
+  "name": "Godavari river at Rajahmundry - OSM reference (empty workspace)",
+  "description": "Real OpenStreetMap-derived river polygon (ODbL, generalised). Contains no ghat or crowd-management infrastructure: drop surveyed data into this folder or draw features before simulating.",
+  "is_synthetic": false,
+  "basemap": "osm",
+  "create_presets": false,
+  "defaults": {"license": "ODbL-1.0", "attribution": "(c) OpenStreetMap contributors", "is_synthetic": false, "is_surveyed": false}
+}

@@ -121,9 +121,14 @@ def read_vector(path: Path, *, layer: str | None = None, pk_type: str | None = N
     return features, info
 
 
-def read_dem(path: Path, bounds_lonlat: tuple[float, float, float, float], size: int = 129) -> dict:
-    """Sample a DEM onto a regular lon/lat grid (row 0 = north) for the 3D terrain."""
+def read_dem(path: Path, bounds_lonlat: tuple[float, float, float, float], size: int | None = None) -> dict:
+    """Sample a DTM/DEM/DSM onto a regular lon/lat grid (row 0 = north) for the 3D terrain.
+
+    Only the window covering the site is read, decimated to at most ~2048 px, so
+    large survey DTMs (e.g. 0.5 m, tens of thousands of pixels) load quickly. The
+    output grid is 65..513 samples per side depending on the DEM resolution."""
     import rasterio
+    from rasterio.windows import from_bounds
 
     west, south, east, north = bounds_lonlat
     try:
@@ -133,26 +138,45 @@ def read_dem(path: Path, bounds_lonlat: tuple[float, float, float, float], size:
     with ds:
         if ds.crs is None:
             raise ImportErrorWithDetail("the raster has no CRS")
-        band = ds.read(1, masked=True).astype("float64")
+        tr = Transformer.from_crs("EPSG:4326", ds.crs, always_xy=True)
+        bx, by = tr.transform([west, east, west, east], [south, south, north, north])
+        win = from_bounds(min(bx), min(by), max(bx), max(by), transform=ds.transform)
+        win = win.round_offsets().round_lengths()
+        col_off, row_off = max(0, int(win.col_off)), max(0, int(win.row_off))
+        w = min(ds.width, int(win.col_off + win.width)) - col_off
+        h = min(ds.height, int(win.row_off + win.height)) - row_off
+        if w <= 0 or h <= 0:
+            raise ImportErrorWithDetail("the DEM does not overlap the site")
+        from rasterio.windows import Window
+
+        win = Window(col_off, row_off, w, h)
+        f = max(1.0, max(w, h) / 2048.0)
+        out_w, out_h = max(2, int(w / f)), max(2, int(h / f))
+        band = ds.read(1, window=win, out_shape=(out_h, out_w), masked=True, resampling=rasterio.enums.Resampling.average)
+        band = band.astype("float64")
+        wt = ds.window_transform(win) @ rasterio.Affine.scale(w / out_w, h / out_h)
+        res_m = abs(ds.transform.a) * (111_320 if ds.crs.is_geographic else 1.0)
+        if size is None:
+            extent_m = max((east - west) * 111_320 * np.cos(np.radians((north + south) / 2)), (north - south) * 110_540)
+            size = int(np.clip(2 ** np.ceil(np.log2(max(extent_m / max(res_m, 1.0), 64))) + 1, 65, 513))
         lons = np.linspace(west, east, size)
         lats = np.linspace(north, south, size)
         LON, LAT = np.meshgrid(lons, lats)
-        tr = Transformer.from_crs("EPSG:4326", ds.crs, always_xy=True)
         X, Y = tr.transform(LON.ravel(), LAT.ravel())
-        inv = ~ds.transform
+        inv = ~wt
         X, Y = np.asarray(X), np.asarray(Y)
         cols = inv.a * X + inv.b * Y + inv.c - 0.5
         rows = inv.d * X + inv.e * Y + inv.f - 0.5
-        c0 = np.clip(np.floor(cols).astype(int), 0, ds.width - 1)
-        r0 = np.clip(np.floor(rows).astype(int), 0, ds.height - 1)
-        c1 = np.clip(c0 + 1, 0, ds.width - 1)
-        r1 = np.clip(r0 + 1, 0, ds.height - 1)
+        c0 = np.clip(np.floor(cols).astype(int), 0, out_w - 1)
+        r0 = np.clip(np.floor(rows).astype(int), 0, out_h - 1)
+        c1 = np.clip(c0 + 1, 0, out_w - 1)
+        r1 = np.clip(r0 + 1, 0, out_h - 1)
         fx = np.clip(cols - c0, 0, 1)
         fy = np.clip(rows - r0, 0, 1)
         data = band.filled(np.nan)
         z = (data[r0, c0] * (1 - fx) * (1 - fy) + data[r0, c1] * fx * (1 - fy)
              + data[r1, c0] * (1 - fx) * fy + data[r1, c1] * fx * fy)
-        inside = (cols >= -0.5) & (cols <= ds.width - 0.5) & (rows >= -0.5) & (rows <= ds.height - 0.5)
+        inside = (cols >= -0.5) & (cols <= out_w - 0.5) & (rows >= -0.5) & (rows <= out_h - 0.5)
         z[~inside] = np.nan
         if np.isnan(z).all():
             raise ImportErrorWithDetail("the DEM does not overlap the site")
@@ -163,3 +187,47 @@ def read_dem(path: Path, bounds_lonlat: tuple[float, float, float, float], size:
             "heights": np.round(z, 2).tolist(), "min": float(z.min()), "max": float(z.max()),
             "source_crs": ds.crs.to_string(), "resolution": [abs(ds.transform.a), abs(ds.transform.e)],
         }
+
+
+def read_ortho(path: Path, out_png: Path, max_px: int = 4096) -> dict:
+    """Reproject an orthophoto/satellite GeoTIFF to WGS84 and write a PNG overlay.
+
+    Suitable for site-sized imagery; very large mosaics should be tiled with
+    gdal2tiles and served as XYZ tiles (VITE_BASEMAP_URL / site basemap)."""
+    import rasterio
+    from rasterio.warp import Resampling, calculate_default_transform, reproject
+
+    try:
+        src = rasterio.open(path)
+    except Exception as exc:
+        raise ImportErrorWithDetail(f"GDAL could not read the image: {exc}") from exc
+    with src:
+        if src.crs is None:
+            raise ImportErrorWithDetail("the image has no CRS")
+        tf, w, h = calculate_default_transform(src.crs, "EPSG:4326", src.width, src.height, *src.bounds)
+        f = max(1.0, max(w, h) / max_px)
+        w2, h2 = max(1, int(w / f)), max(1, int(h / f))
+        tf2 = tf @ rasterio.Affine.scale(w / w2, h / h2)
+        nb = min(src.count, 4) if src.count >= 3 else 1
+        dst = np.zeros((nb if nb != 3 else 4, h2, w2), dtype="uint8")
+        for b in range(nb):
+            arr = np.zeros((h2, w2), dtype="float32")
+            reproject(rasterio.band(src, b + 1), arr, dst_transform=tf2, dst_crs="EPSG:4326",
+                      resampling=Resampling.bilinear)
+            if src.dtypes[b] != "uint8":
+                lo, hi = np.nanpercentile(arr[arr > 0], [2, 98]) if (arr > 0).any() else (0, 1)
+                arr = np.clip((arr - lo) / max(hi - lo, 1e-6) * 255, 0, 255)
+            dst[b] = arr.astype("uint8")
+        if nb == 3:
+            dst[3] = np.where(dst[:3].sum(0) > 0, 255, 0)
+        out_png.parent.mkdir(parents=True, exist_ok=True)
+        import warnings
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", rasterio.errors.NotGeoreferencedWarning)
+            with rasterio.open(out_png, "w", driver="PNG", width=w2, height=h2, count=dst.shape[0], dtype="uint8") as o:
+                o.write(dst)
+        west, north = tf2.c, tf2.f
+        east, south = tf2.c + tf2.a * w2, tf2.f + tf2.e * h2
+        return {"west": west, "south": south, "east": east, "north": north, "width": w2, "height": h2,
+                "source_crs": src.crs.to_string()}

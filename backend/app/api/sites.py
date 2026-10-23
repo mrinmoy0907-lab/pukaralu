@@ -191,6 +191,22 @@ async def list_file_layers(site_id: int, file: UploadFile = File(...), db: Sessi
             raise HTTPException(422, str(exc)) from exc
 
 
+@router.post("/ingest")
+def ingest(db: Session = Depends(get_db)):
+    """Scan the data drop folder (PK_SITES_DIR) and load new or changed files."""
+    from ..services.ingest import ingest_all
+
+    return ingest_all(db)
+
+
+@router.get("/ingest")
+def ingest_status():
+    from ..config import get_settings
+    from ..services.ingest import last_report
+
+    return {**last_report(), "root": str(get_settings().sites_dir)}
+
+
 @router.get("/sites/{site_id}/terrain")
 def terrain(site_id: int, db: Session = Depends(get_db)):
     s = get_site(db, site_id)

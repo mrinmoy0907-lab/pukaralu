@@ -11,7 +11,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from .api import meta, runs, scenarios, sites
+from .api import meta, runs, scenarios, sites, zones
 from .config import APP_VERSION, REPO_ROOT, get_settings
 from .db import SessionLocal, migrate
 from .services.jobs import manager
@@ -36,14 +36,19 @@ def _mark_interrupted_runs() -> None:
 async def lifespan(app: FastAPI):
     migrate()
     _mark_interrupted_runs()
-    if get_settings().seed_demo_data:
-        from .services.sites import seed_demo
+    from .services.ingest import ingest_all
+    from .services.sites import ensure_default_profile
 
-        db = SessionLocal()
-        try:
-            seed_demo(db)
-        finally:
-            db.close()
+    db = SessionLocal()
+    try:
+        ensure_default_profile(db)
+        if get_settings().auto_ingest:
+            rep = ingest_all(db)
+            for s_ in rep["sites"]:
+                log.info("data folder %s: %d imported, %d unchanged, %d error(s)", s_["folder"], len(s_["imported"]),
+                         len(s_["skipped"]), len(s_["errors"]))
+    finally:
+        db.close()
     manager()
     yield
     manager().shutdown()
@@ -59,8 +64,36 @@ app = FastAPI(
 app.add_middleware(GZipMiddleware, minimum_size=2048)
 app.add_middleware(CORSMiddleware, allow_origins=[o.strip() for o in get_settings().cors_origins.split(",") if o.strip()],
                    allow_methods=["*"], allow_headers=["*"])
-for r in (meta.router, sites.router, scenarios.router, runs.router):
+for r in (meta.router, sites.router, scenarios.router, runs.router, zones.router):
     app.include_router(r)
+
+
+@app.get("/sitedata/{path:path}", include_in_schema=False)
+def sitedata(path: str):
+    """Files of the data drop folder (3D Tiles, terrain, models). Pre-gzipped tiles
+    (e.g. quantized-mesh .terrain from cesium-terrain-builder) get Content-Encoding: gzip."""
+    root = get_settings().sites_dir.resolve()
+    f = (root / path).resolve()
+    if root not in f.parents or not f.is_file():
+        return JSONResponse(status_code=404, content={"detail": "not found"})
+    headers = {"Access-Control-Allow-Origin": "*"}
+    with open(f, "rb") as fh:
+        magic = fh.read(2)
+    if magic == b"\x1f\x8b" and f.suffix.lower() != ".gz":
+        headers["Content-Encoding"] = "gzip"
+    media = {".terrain": "application/vnd.quantized-mesh", ".b3dm": "application/octet-stream",
+             ".pnts": "application/octet-stream", ".glb": "model/gltf-binary", ".gltf": "model/gltf+json",
+             ".json": "application/json"}.get(f.suffix.lower())
+    return FileResponse(f, headers=headers, media_type=media)
+
+
+@app.get("/derived/{path:path}", include_in_schema=False)
+def derived(path: str):
+    root = get_settings().derived_dir.resolve()
+    f = (root / path).resolve()
+    if root not in f.parents or not f.is_file():
+        return JSONResponse(status_code=404, content={"detail": "not found"})
+    return FileResponse(f)
 
 
 @app.exception_handler(ValueError)

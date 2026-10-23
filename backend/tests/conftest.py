@@ -16,7 +16,7 @@ ORIGIN = (85.0, 15.0)
 
 @pytest.fixture(scope="session")
 def demo_features() -> list[dict]:
-    return json.loads((ROOT / "data" / "synthetic" / "demo_site.geojson").read_text())["features"]
+    return json.loads((ROOT / "data" / "sites" / "01_synthetic_offshore_demo" / "vector" / "demo_site.geojson").read_text())["features"]
 
 
 def to_features(items, origin=ORIGIN) -> list[dict]:
@@ -67,6 +67,7 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setenv("PK_DATABASE_URL", pg or f"sqlite:///{tmp_path / 'test.db'}")
     monkeypatch.setenv("PK_RESULTS_DIR", str(tmp_path / "results"))
     monkeypatch.setenv("PK_UPLOAD_DIR", str(tmp_path / "uploads"))
+    monkeypatch.setenv("PK_DERIVED_DIR", str(tmp_path / "derived"))
     monkeypatch.setenv("PK_JOB_MODE", "thread")
     monkeypatch.setenv("PK_MAX_WORKERS", "2")
     from app import config, db
@@ -84,7 +85,7 @@ def client(tmp_path, monkeypatch):
     jobs.reset_manager()
     db.reset_engine()
     config.get_settings.cache_clear()
-    for k in ("PK_DATABASE_URL", "PK_RESULTS_DIR", "PK_UPLOAD_DIR", "PK_JOB_MODE", "PK_MAX_WORKERS"):
+    for k in ("PK_DATABASE_URL", "PK_RESULTS_DIR", "PK_UPLOAD_DIR", "PK_DERIVED_DIR", "PK_JOB_MODE", "PK_MAX_WORKERS"):
         os.environ.pop(k, None)
 
 

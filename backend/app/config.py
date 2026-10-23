@@ -18,6 +18,11 @@ class Settings(BaseSettings):
     results_dir: Path = REPO_ROOT / "var" / "results"
     upload_dir: Path = REPO_ROOT / "var" / "uploads"
     data_dir: Path = REPO_ROOT / "data"
+    # Data drop folder: one sub-folder per site (see docs/DATA_FOLDER.md). Scanned at start-up
+    # and on demand (Data > Scan data folder, POST /api/ingest, or `python -m app.ingest`).
+    sites_dir: Path = REPO_ROOT / "data" / "sites"
+    derived_dir: Path = REPO_ROOT / "var" / "derived"
+    auto_ingest: bool = True
     # Number of simulations that may run concurrently in worker processes.
     max_workers: int = 2
     # "process" (default, isolated worker processes) or "thread" (used by tests)
@@ -25,7 +30,6 @@ class Settings(BaseSettings):
     # Hard upper bounds that protect the server from accidental huge runs.
     max_agents: int = 20000
     max_duration_s: float = 4 * 3600
-    seed_demo_data: bool = True
     cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
 
 
@@ -34,6 +38,7 @@ def get_settings() -> Settings:
     s = Settings()
     s.results_dir.mkdir(parents=True, exist_ok=True)
     s.upload_dir.mkdir(parents=True, exist_ok=True)
+    s.derived_dir.mkdir(parents=True, exist_ok=True)
     if s.database_url.startswith("sqlite:///"):
         Path(s.database_url.removeprefix("sqlite:///")).parent.mkdir(parents=True, exist_ok=True)
     return s

@@ -36,6 +36,8 @@ class Site(Base):
     tileset_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     terrain: Mapped[dict | None] = mapped_column(JSONType, nullable=True)
     provenance: Mapped[dict] = mapped_column(JSONType, default=dict)
+    # 3D/raster assets loaded from the data folder: tilesets, models, imagery, terrain_url, source_folder
+    assets: Mapped[dict] = mapped_column(JSONType, default=dict)
     version: Mapped[int] = mapped_column(Integer, default=1)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)

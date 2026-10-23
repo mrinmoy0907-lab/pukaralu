@@ -190,46 +190,6 @@ def ensure_default_profile(db: Session) -> ThresholdProfile:
     return p
 
 
-def seed_demo(db: Session) -> None:
-    """Create the synthetic demonstration site and the real-data reference site."""
-    ensure_default_profile(db)
-    if db.scalars(select(Site)).first() is not None:
-        return
-    data = get_settings().data_dir
-    syn = data / "synthetic" / "demo_site.geojson"
-    if syn.exists():
-        meta = json.loads(syn.read_text()).get("metadata", {})
-        lon, lat = meta.get("origin_lonlat", (85.0, 15.0))
-        site = Site(name="SYNTHETIC demonstration ghat",
-                    description=("Invented layout for testing and training. NOT surveyed data and NOT a real Pushkaralu ghat. "
-                                 "Placed offshore on purpose. Replace with surveyed GIS data (docs/DATA_REPLACEMENT.md)."),
-                    is_synthetic=True, origin_lon=lon, origin_lat=lat, basemap="grid",
-                    provenance={"synthetic": True, "generator": "backend/scripts/generate_synthetic_site.py"})
-        db.add(site)
-        db.flush()
-        import_file(db, site, syn, filename=syn.name, license="CC0-1.0 (synthetic)", attribution="Synthetic demo data",
-                    is_synthetic=True, is_surveyed=False, notes="Synthetic demonstration geometry")
-        dem = data / "synthetic" / "demo_dem.tif"
-        if dem.exists():
-            import_file(db, site, dem, filename=dem.name, license="CC0-1.0 (synthetic)", attribution="Synthetic terrain",
-                        is_synthetic=True, is_surveyed=False, notes="Synthetic DEM")
-        create_preset_scenarios(db, site)
-    real = data / "real" / "godavari_rajahmundry_osm.geojson"
-    if real.exists():
-        g = [shape(f["geometry"]) for f in json.loads(real.read_text())["features"]]
-        c = g[0].centroid
-        site = Site(name="Godavari river at Rajahmundry - OSM reference layer",
-                    description=("Real OpenStreetMap-derived river polygon (ODbL, generalised ~10 m). Contains no ghat or "
-                                 "crowd-management infrastructure: import or draw surveyed features before simulating."),
-                    is_synthetic=False, origin_lon=round(c.x, 5), origin_lat=round(c.y, 5), basemap="osm",
-                    provenance={"synthetic": False, "source": "OpenStreetMap contributors via @geo-maps/earth-rivers-10m"})
-        db.add(site)
-        db.flush()
-        import_file(db, site, real, filename=real.name, license="ODbL-1.0", attribution="(c) OpenStreetMap contributors",
-                    is_synthetic=False, is_surveyed=False, notes="Generalised OSM water polygon, clipped to Rajahmundry")
-    db.commit()
-
-
 def create_preset_scenarios(db: Session, site: Site) -> list[Scenario]:
     from ..sim.config import ScenarioConfig
     from ..sim.presets import build_presets

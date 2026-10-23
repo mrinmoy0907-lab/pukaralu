@@ -48,7 +48,7 @@ def main(src: str) -> None:
             for i, p in enumerate(parts)
         ],
     }
-    out = ROOT / "data" / "real" / "godavari_rajahmundry_osm.geojson"
+    out = ROOT / "data" / "reference" / "godavari_rajahmundry_osm.geojson"
     out.write_text(json.dumps(fc))
     print(f"wrote {out} ({out.stat().st_size // 1024} KiB)")
 

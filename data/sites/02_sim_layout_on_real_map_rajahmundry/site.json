@@ -1,0 +1,26 @@
+{
+  "name": "SIM DATA layout on real map - Rajahmundry riverfront",
+  "description": "Real basemap and real OpenStreetMap river polygon (ODbL). All ghats, corridors, gates, holding areas and buildings are ILLUSTRATIVE SIM DATA placed on a straight stretch of the river bank; they do not represent the real Pushkar Ghat or any surveyed infrastructure.",
+  "is_synthetic": true,
+  "origin": [
+    81.768378,
+    17.004
+  ],
+  "basemap": "osm",
+  "create_presets": true,
+  "defaults": {
+    "license": "CC0-1.0 (synthetic)",
+    "attribution": "Synthetic SIM DATA layout",
+    "is_synthetic": true,
+    "is_surveyed": false
+  },
+  "files": {
+    "vector/godavari_river_osm.geojson": {
+      "license": "ODbL-1.0",
+      "attribution": "(c) OpenStreetMap contributors",
+      "is_synthetic": false,
+      "is_surveyed": false,
+      "notes": "Generalised OSM water polygon (@geo-maps/earth-rivers-10m)"
+    }
+  }
+}

@@ -32,6 +32,7 @@ def site_dict(s: Site, n_features: int | None = None) -> dict:
     return {"id": s.id, "name": s.name, "description": s.description, "is_synthetic": s.is_synthetic,
             "origin": [s.origin_lon, s.origin_lat], "basemap": s.basemap, "tileset_url": s.tileset_url,
             "has_terrain": s.terrain is not None, "provenance": s.provenance, "version": s.version,
+            "assets": s.assets or {},
             "n_features": n_features, "updated_at": s.updated_at.isoformat() if s.updated_at else None}
 
 

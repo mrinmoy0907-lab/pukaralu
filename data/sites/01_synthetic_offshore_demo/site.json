@@ -1,0 +1,17 @@
+{
+  "name": "SYNTHETIC demonstration ghat (offshore)",
+  "description": "Invented layout for testing and training. NOT surveyed data and NOT a real Pushkaralu ghat. Placed offshore on purpose. Replace with surveyed GIS data (docs/DATA_FOLDER.md).",
+  "is_synthetic": true,
+  "origin": [
+    85.0,
+    15.0
+  ],
+  "basemap": "grid",
+  "create_presets": true,
+  "defaults": {
+    "license": "CC0-1.0 (synthetic)",
+    "attribution": "Synthetic demo data",
+    "is_synthetic": true,
+    "is_surveyed": false
+  }
+}
