@@ -42,6 +42,13 @@ export interface Site {
   version: number;
   n_features: number | null;
   datasets?: Dataset[];
+  assets?: {
+    source_folder?: string;
+    terrain_url?: string | null;
+    tilesets?: { name: string; url: string; height_offset?: number }[];
+    models?: { name: string; url: string; lon: number; lat: number; height: number; heading_deg: number; scale: number }[];
+    imagery?: { name: string; url: string; west: number; south: number; east: number; north: number; attribution?: string }[];
+  };
 }
 
 export interface Terrain {

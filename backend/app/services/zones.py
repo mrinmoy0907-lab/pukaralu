@@ -24,7 +24,7 @@ import math
 
 import numpy as np
 import shapely
-from shapely.geometry import Point, shape
+from shapely.geometry import Point, mapping, shape
 from shapely.ops import unary_union
 
 from ..geo.catalog import DEFAULT_LINE_OBSTACLE_THICKNESS
@@ -94,7 +94,14 @@ def area_breakdown(fid: str, features: list[dict], origin, terrain: dict | None 
     steps = unary_union([g for f, g in loc if f["properties"].get("pk_type") in STEP_TYPES] or [Point()])
     step_poly = z3.intersection(steps)
     gain = _slope_gain(step_poly, terrain, proj)
-    return {"zone_id": fid, "gross_m2": round(gross, 1), "water_excluded_m2": round(w, 1),
+
+    def gj(g):
+        g = g.simplify(0.05) if not g.is_empty else g
+        return mapping(proj.to_wgs84(g)) if not g.is_empty and g.area > 0.01 else None
+
+    geoms = {"walkable": gj(z3), "water": gj(zone.intersection(water)), "obstructions": gj(z1.intersection(obstr)),
+             "barricades": gj(z2.intersection(barr))}
+    return {"geometries": geoms, "zone_id": fid, "gross_m2": round(gross, 1), "water_excluded_m2": round(w, 1),
             "obstructions_m2": round(o, 1), "barricades_m2": round(b, 1), "step_surface_gain_m2": round(gain, 1),
             "net_walkable_m2": round(z3.area + gain, 1), "has_terrain": bool(terrain),
             "method": "net = gross - water - obstructions - barricades + DEM step-surface gain (local metric CRS)"}

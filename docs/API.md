@@ -27,6 +27,22 @@ Errors are JSON: `{"detail": "message"}` or, for validation, `{"detail": {"error
 | GET | `/sites/{id}/export.geojson` | all features |
 | GET/POST | `/sites/{id}/observations` | observed/forecast counts (JSON); `POST /observations/csv` upload; `DELETE /observations/{oid}` |
 
+## Data folder
+| Method | Path | Purpose |
+|---|---|---|
+| POST | `/ingest` | scan `PK_SITES_DIR` (default `data/sites/`) and load new or changed files (vectors, DTM/DEM, terrain, 3D Tiles, glTF, imagery) |
+| GET | `/ingest` | report of the last scan |
+| GET | `/sitedata/<folder>/<path>` (no `/api`) | files of the data folder (3D Tiles, terrain tiles, models); pre-gzipped tiles get `Content-Encoding: gzip` |
+
+## Zones (P-01)
+| Method | Path | Purpose |
+|---|---|---|
+| GET | `/sites/{id}/zones` | zone register: every zone-like polygon with type, owner department, status, net walkable area |
+| POST | `/sites/{id}/zones/{fid}/area` | net walkable area breakdown (gross, water, obstructions, barricades, DTM step-surface gain, geometries) + topology check; stored on the feature |
+| POST | `/sites/{id}/zones/approve` | `{fids, status: review/active/retired, approved_by, approval_remarks, effective_from, effective_to}` – activation requires `approved_by` and valid topology |
+
+Zone metadata (`zone_type`, `parent_id`, `owner_department`, `valid_from`, `valid_to`, `description`) is edited with the feature endpoints.
+
 ## Scenarios
 | Method | Path | Purpose |
 |---|---|---|

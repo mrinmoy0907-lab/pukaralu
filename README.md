@@ -11,27 +11,33 @@ compare alternatives, and export CSV/PDF/GeoJSON outputs for SOP drafting and dr
 > simulated estimates. Thresholds, demand figures and site geometry must be
 > validated, and every safety-critical decision approved by authorised officials.
 
-> **Demonstration data.** The bundled "SYNTHETIC demonstration ghat" is invented
-> geometry, deliberately placed offshore (85.0°E, 15.0°N) so it cannot be
-> mistaken for a real place. The only real dataset bundled is an OpenStreetMap-derived
-> Godavari river polygon near Rajahmundry (ODbL). No real ghat geometry is
-> invented or presented as surveyed. See [docs/DATA_REPLACEMENT.md](docs/DATA_REPLACEMENT.md).
+> **Demonstration data.** Two SIM DATA layouts are bundled: one offshore
+> (85.0°E, 15.0°N, with a synthetic river and DEM) and the same layout placed on
+> a straight stretch of the real OpenStreetMap Godavari bank at Rajahmundry so it
+> can be seen over the real map. The layout is invented and labelled SIM DATA in
+> the application; it does not represent the real ghats. The only real dataset
+> bundled is the OSM river polygon (ODbL). Load surveyed data via
+> [docs/DATA_FOLDER.md](docs/DATA_FOLDER.md).
 
-| 3D operational view (agent-based, peak arrivals) | Synchronised comparison |
+| Zones: walkable-area calculation (P-01) | 3D operational view (agent-based, peak arrivals) |
 |---|---|
-| ![3D](docs/img/screenshot-3d.png) | ![compare](docs/img/screenshot-compare.png) |
-| **Macroscopic evacuation (computed corridor flows)** | **2D planning map** |
-| ![evacuation](docs/img/screenshot-evacuation-ctm.png) | ![2D](docs/img/screenshot-2d.png) |
+| ![zones](docs/img/screenshot-zones.jpg) | ![3D](docs/img/screenshot-3d.jpg) |
+| **Macroscopic evacuation (computed corridor flows)** | **Synchronised comparison** |
+| ![evacuation](docs/img/screenshot-evacuation-ctm.jpg) | ![compare](docs/img/screenshot-compare.jpg) |
 
-All screenshots show the SYNTHETIC demonstration site and simulated estimates.
+All screenshots show SIM DATA and simulated estimates. Map tiles were unreachable where they were captured, so the basemap appears plain; on a connected computer the real map is shown behind the layout.
 
 ## What it does
 
 | Area | Implemented |
 |---|---|
-| 3D viewer | CesiumJS globe, terrain from imported DEM (custom heightmap provider), extruded buildings/temples, walls, corridors, gates and service symbols, 3D Tiles URL per site, layer toggles, picking + inspector |
+| UI | Light operations-centre layout: navigation rail, site selector, SIM / real-map badges, role switcher, map toolbar (2D/3D, search, Select, Draw Zone, Draw Obstruction, Add Gate, Edit, Delete, More), Layers menu with basemaps, snapping & validation |
+| Basemaps | OpenStreetMap streets, Esri satellite, CARTO light/dark, custom XYZ, or none – behind both 2D and 3D views |
+| 3D viewer | CesiumJS globe, terrain from DTM/DEM or quantized-mesh, extruded buildings/temples, walls, corridors, gates and service symbols, 3D Tiles, glTF models, orthophotos, picking + inspector |
+| Zones (P-01) | Zone properties (parent, type, owner department, validity), net walkable area (gross − water − obstructions − barricades + DTM step surface), topology checks, zone register with review / Confirm & Activate |
+| Data folder | `data/sites/<site>/` auto-loaded: vectors, DTM/DEM, terrain tiles, 3D Tiles, glTF, orthophotos, licences via `site.json` |
 | 2D planning | OpenLayers map with draw / modify / select for every feature type, attribute editing, network overlay |
-| GIS import | GeoJSON, GeoPackage, zipped Shapefile, KML … via GDAL/OGR (pyogrio), any CRS → WGS84; DEM rasters via GDAL (rasterio); mandatory licence + provenance per dataset |
+| GIS import | data folder or single-file upload: GeoJSON, GeoPackage, Shapefile, KML … via GDAL/OGR (pyogrio), any CRS → WGS84; DEM rasters via GDAL (rasterio); licence + provenance per dataset |
 | Network | Pedestrian network built from corridors (width, direction, stairs/ramps, emergency-only, blocked), gates and area nodes; Dijkstra, Yen k-shortest + logit, CCRP capacity-constrained evacuation routing |
 | Simulation | **Agent-based**: JuPedSim Collision-Free Speed Model or Social Force Model, Poisson arrivals, entry queues, holding/bathing dwell, diversions, mid-run closures, evacuation re-routing. **Macroscopic**: multi-commodity Cell Transmission Model with a Weidmann fundamental diagram. Every run is labelled with its method. |
 | Analytics | Zone counts & densities, density grid, corridor throughput, entry queues & waiting times, travel times, time above limit, bottleneck detection, exit utilisation, clearance by zone, holding-area occupancy / time-to-limit / alternatives |
@@ -41,7 +47,28 @@ All screenshots show the SYNTHETIC demonstration site and simulated estimates.
 | Outputs | PDF report (maps, charts, assumptions, provenance, limitations, interventions, review/approval fields), CSV zip, density / bottleneck / layout GeoJSON, comparison PDF/CSV |
 | Observations | Manual/CSV observed and forecast counts, displayed separately from simulated values (no live sensor integration yet) |
 
-## Quick start (local, no Docker)
+## Quick start on Windows (laptop)
+
+Install **Python 3.11–3.13 (64-bit)** from python.org (tick *Add python.exe to PATH*) and **Node.js LTS**. Then, in the project folder:
+
+```bat
+setup_windows.bat        :: once: creates .venv, installs backend + frontend, builds the web app
+start_windows.bat        :: starts http://127.0.0.1:8000 and opens the browser
+start_windows.bat dev    :: development mode: API on :8000 + live-reloading UI on :5173
+scan_data_windows.bat    :: load new/changed files from data\sites\ without starting the server
+test_windows.bat         :: run the automated tests
+```
+
+## Bringing in real data (DTM/DEM, 3D models, GIS)
+
+Drop files into **`data/sites/<your-site>/`** – `vector/` (GeoJSON, GeoPackage, Shapefile, KML),
+`dem/` (DTM/DEM/DSM GeoTIFF), `terrain/` (quantized-mesh), `tiles3d/<name>/tileset.json`
+(buildings, photogrammetry, LiDAR as 3D Tiles), `models/` (glTF/GLB) and `imagery/`
+(orthophotos), plus an optional `site.json` for licences, type mapping and model placement.
+The folder is loaded at start-up and with **Data Sources → Scan data folder**; changed
+files are re-imported. Details and conversion recipes: [docs/DATA_FOLDER.md](docs/DATA_FOLDER.md).
+
+## Quick start (Linux / macOS, no Docker)
 
 Requirements: Python 3.11–3.13, Node.js 20+.
 
@@ -52,9 +79,10 @@ pip install -r backend/requirements-dev.txt
 cd backend && uvicorn app.main:app --port 8000      # http://localhost:8000/docs
 ```
 
-On first start the database (SQLite in `var/`) is migrated and seeded with the
-synthetic demo site (+ synthetic DEM), the OSM river reference layer and the 10
-preset scenarios.
+On first start the database (SQLite in `var/`) is created and the data folder is
+loaded: the offshore SYNTHETIC demo (with synthetic DEM), the **SIM DATA layout on
+the real map at Rajahmundry** (real OSM river, illustrative layout) and an empty OSM
+reference workspace, with the 10 preset scenarios.
 
 ```bash
 # frontend (second terminal)
@@ -63,9 +91,17 @@ npm install          # also copies Cesium's static assets to public/cesium
 npm run dev          # http://localhost:5173 (proxies /api to :8000)
 ```
 
-Then: **Scenarios → ▶ Run** on a preset, watch progress in **Runs**, click
+Then: **Scenarios → ▶ Run** on a preset, watch progress in **Simulation Runs**, click
 **View results**, press ▶ in the timeline to replay agents and the density
-heatmap, and try **Compare** with two runs.
+heatmap, and try **Compare** with two runs. **Zones** walks through zone drawing,
+walkable-area calculation and approval (use case P-01).
+
+## User journeys
+
+[docs/user-journeys.pdf](docs/user-journeys.pdf) shows every use case (P-01 … P-14)
+step by step with screenshots of the application (also linked in the app under
+Use Cases and Reports). Regenerate with `node tools/user_journeys/capture.mjs`
+and `node tools/user_journeys/build_pdf.mjs` while the app runs.
 
 ### With Docker (PostgreSQL/PostGIS)
 
@@ -97,7 +133,7 @@ simulated clearance times alone must not be used to call a plan safe.
 ## Tests
 
 ```bash
-cd backend && pytest                    # 33 tests: model, routing, both engines, API, import, reports
+cd backend && pytest                    # 35 tests: model, routing, both engines, API, import, data folder, zones, reports
 PK_TEST_PG_URL=postgresql+psycopg://user@host/db pytest tests/test_api.py   # same API tests on PostgreSQL
 cd frontend && npm test && npm run build   # unit tests + type-check + production build
 ```
@@ -108,7 +144,9 @@ cd frontend && npm test && npm run build   # unit tests + type-check + productio
 * [docs/MODELS.md](docs/MODELS.md) – simulation and analytics methods, assumptions, units, limitations
 * [docs/API.md](docs/API.md) – REST API (interactive OpenAPI docs at `/docs`)
 * [docs/DATABASE.md](docs/DATABASE.md) – schema and migrations
-* [docs/DATA_REPLACEMENT.md](docs/DATA_REPLACEMENT.md) – replacing synthetic data with surveyed Pushkaralu GIS data
+* [docs/DATA_FOLDER.md](docs/DATA_FOLDER.md) – data drop folder for DTM/DEM, 3D models, 3D Tiles, imagery and GIS
+* [docs/DATA_REPLACEMENT.md](docs/DATA_REPLACEMENT.md) – feature types and replacing synthetic data with surveyed Pushkaralu GIS data
+* [docs/user-journeys.pdf](docs/user-journeys.pdf) – user journeys with screenshots for all use cases
 * [docs/LICENSES.md](docs/LICENSES.md) – dependency and data licences
 * [docs/ROADMAP.md](docs/ROADMAP.md) – phases, acceptance criteria status, known limitations
 
@@ -129,8 +167,11 @@ frontend/
   src/components  CesiumView (3D), PlanMap (2D), scenario editor, runs, results, compare, data, method panels
   src/lib         colour scales, replay helpers, terrain sampling, scenario pre-checks (+ unit tests)
 data/
-  synthetic/    demo_site.geojson, demo_dem.tif  (SYNTHETIC, CC0)
-  real/         godavari_rajahmundry_osm.geojson (OpenStreetMap, ODbL)
+  sites/        data drop folder - one sub-folder per site (bundled: 3 demo folders, SIM DATA + real OSM river)
+  reference/    godavari_rajahmundry_osm.geojson (OpenStreetMap, ODbL)
+  examples/     example observation CSV
+tools/user_journeys/  scripts that capture screenshots and build docs/user-journeys.pdf
+*.bat         Windows setup / start / scan / test
 docs/
 ```
 

@@ -37,6 +37,7 @@ def test_meta_and_seeded_sites(client):
     assert terr["min"] < 0 < terr["max"]  # river bed below, town above water level
     presets = client.get(f"/api/sites/{syn['id']}/presets").json()
     assert len(presets) == 10 and all(p["available"] for p in presets)
+    assert all(p["config"]["walking_speed"]["mean"] > 0 for p in presets)  # full configs incl. defaults
     assert len(client.get(f"/api/sites/{syn['id']}/scenarios").json()) == 10
 
 

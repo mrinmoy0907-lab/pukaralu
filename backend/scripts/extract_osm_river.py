@@ -5,7 +5,7 @@ Usage:
     npm pack @geo-maps/earth-rivers-10m && tar xzf geo-maps-earth-rivers-10m-*.tgz
     python backend/scripts/extract_osm_river.py package/map.geo.json
 
-The output (data/real/godavari_rajahmundry_osm.geojson) is real, openly
+The output (data/reference/godavari_rajahmundry_osm.geojson) is real, openly
 licensed GIS data, generalised to ~10 m. It only shows the river; it contains
 no ghat, crowd-management or surveyed infrastructure geometry.
 """

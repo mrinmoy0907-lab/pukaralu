@@ -87,6 +87,14 @@ def sitedata(path: str):
     return FileResponse(f, headers=headers, media_type=media)
 
 
+@app.get("/api/docs/user-journeys.pdf", include_in_schema=False)
+def user_journeys():
+    f = REPO_ROOT / "docs" / "user-journeys.pdf"
+    if not f.exists():
+        return JSONResponse(status_code=404, content={"detail": "docs/user-journeys.pdf has not been generated"})
+    return FileResponse(f, media_type="application/pdf", filename="user-journeys.pdf")
+
+
 @app.get("/derived/{path:path}", include_in_schema=False)
 def derived(path: str):
     root = get_settings().derived_dir.resolve()

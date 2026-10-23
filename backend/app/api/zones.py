@@ -36,7 +36,8 @@ def recalculate(site_id: int, fid: str, db: Session = Depends(get_db)):
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
     f = db.scalar(select(Feature).where(Feature.site_id == site_id, Feature.fid == fid))
-    f.properties = {**(f.properties or {}), "net_walkable_m2": area["net_walkable_m2"], "area_breakdown": area,
+    f.properties = {**(f.properties or {}), "net_walkable_m2": area["net_walkable_m2"],
+                    "area_breakdown": {k: v for k, v in area.items() if k != "geometries"},
                     "area_calculated_at": datetime.now(timezone.utc).isoformat(), "topology_valid": topo["valid"]}
     db.commit()
     return {"area": area, "topology": topo}

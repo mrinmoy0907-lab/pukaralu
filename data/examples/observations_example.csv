@@ -1,0 +1,7 @@
+zone_fid,count,kind,t_offset_s,source,notes
+hold_w,40,observed,300,manual,"EXAMPLE values for the demo - not real counts"
+hold_w,95,observed,600,counter,"EXAMPLE values for the demo - not real counts"
+hold_w,160,observed,900,counter,"EXAMPLE values for the demo - not real counts"
+hold_w,220,forecast,1200,manual,"EXAMPLE forecast"
+bath_main,120,observed,600,cctv,"EXAMPLE values for the demo - not real counts"
+bath_main,260,observed,900,cctv,"EXAMPLE values for the demo - not real counts"

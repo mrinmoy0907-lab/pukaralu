@@ -4,7 +4,42 @@ import { decimation } from "./lib/replay";
 import type { Feature, Meta, Run, RunData, Scenario, Site, Terrain, ThresholdProfile } from "./types";
 
 export type ViewMode = "3d" | "2d" | "split";
-export type Tab = "layers" | "scenarios" | "runs" | "results" | "compare" | "data" | "about";
+export type Tab =
+  | "overview"
+  | "usecases"
+  | "workbench"
+  | "zones"
+  | "scenarios"
+  | "runs"
+  | "results"
+  | "compare"
+  | "feeds"
+  | "data"
+  | "reports"
+  | "admin";
+
+export const ROLES = [
+  { key: "R1", label: "R1 · Mela administrator" },
+  { key: "R3", label: "R3 · Zone in-charge" },
+  { key: "R5", label: "R5 · Crowd safety officer" },
+  { key: "R7", label: "R7 · Planner / GIS analyst" },
+];
+
+export interface AreaCalc {
+  fid: string;
+  area: {
+    gross_m2: number;
+    water_excluded_m2: number;
+    obstructions_m2: number;
+    barricades_m2: number;
+    step_surface_gain_m2: number;
+    net_walkable_m2: number;
+    has_terrain: boolean;
+    method: string;
+    geometries: Record<string, any>;
+  };
+  topology: { valid: boolean; issues: string[] };
+}
 
 export interface Toast {
   id: number;
@@ -36,8 +71,17 @@ interface State {
   playing: boolean;
   speed: number;
   drawType: string | null;
+  editMode: boolean;
   toasts: Toast[];
   busy: Record<string, boolean>;
+  basemap: string;
+  baseLayers: { imagery: boolean; tiles3d: boolean; models: boolean; terrain: boolean; buildings: boolean };
+  role: string;
+  snapping: { roads: boolean; river: boolean; preventOverlap: boolean; showTopology: boolean };
+  focus: { fid: string; ts: number } | null;
+  pendingGeometry: { geometry: any; pk_type: string } | null;
+  areaCalc: AreaCalc | null;
+  zoneRegisterVersion: number;
 
   init: () => Promise<void>;
   selectSite: (id: number) => Promise<void>;
@@ -62,7 +106,7 @@ export const useStore = create<State>((set, get) => ({
   scenarios: [],
   runs: [],
   profiles: [],
-  tab: "scenarios",
+  tab: "overview",
   view: "3d",
   selected: null,
   hiddenGroups: {},
@@ -76,8 +120,17 @@ export const useStore = create<State>((set, get) => ({
   playing: false,
   speed: 10,
   drawType: null,
+  editMode: false,
   toasts: [],
   busy: {},
+  basemap: "osm",
+  baseLayers: { imagery: true, tiles3d: true, models: true, terrain: true, buildings: true },
+  role: "R7",
+  snapping: { roads: true, river: true, preventOverlap: true, showTopology: true },
+  focus: null,
+  pendingGeometry: null,
+  areaCalc: null,
+  zoneRegisterVersion: 0,
 
   set: (p) => set(p as any),
 
@@ -96,8 +149,14 @@ export const useStore = create<State>((set, get) => ({
     try {
       const [meta, sites, profiles] = await Promise.all([api.meta(), api.sites(), api.profiles()]);
       set({ meta, sites, profiles });
-      const want = Number(new URLSearchParams(location.search).get("site")) || sites[0]?.id;
+      const q = new URLSearchParams(location.search);
+      const want = Number(q.get("site")) || sites[0]?.id;
       if (want) await get().selectSite(want);
+      const tab = q.get("tab") as Tab | null;
+      if (q.get("view")) set({ view: q.get("view") as ViewMode });
+      if (q.get("run")) await get().setActiveRun(q.get("run"));
+      if (tab) set({ tab });
+      if (q.get("t")) set({ time: Number(q.get("t")) });
     } catch (e) {
       get().fail(e, "Loading application data");
     }
@@ -106,7 +165,20 @@ export const useStore = create<State>((set, get) => ({
   selectSite: async (id) => {
     try {
       const site = await api.site(id);
-      set({ site, features: [], terrain: null, selected: null, activeRun: null, compare: { a: null, b: null }, network: null, routeResult: null, time: 0 });
+      set({
+        site,
+        basemap: site.basemap || "osm",
+        features: [],
+        terrain: null,
+        selected: null,
+        activeRun: null,
+        compare: { a: null, b: null },
+        network: null,
+        routeResult: null,
+        areaCalc: null,
+        pendingGeometry: null,
+        time: 0,
+      });
       const [fc, terrain] = await Promise.all([api.features(id), site.has_terrain ? api.terrain(id) : Promise.resolve(null)]);
       set({ features: fc.features, terrain });
       await Promise.all([get().reloadScenarios(), get().reloadRuns()]);

@@ -73,7 +73,7 @@ export default function ScenarioPanel() {
   }
   function newFrom(key: string) {
     const p = presets.find((x) => x.key === key);
-    const c = p?.config ? JSON.parse(JSON.stringify(p.config)) : emptyConfig();
+    const c = { ...emptyConfig(), ...(p?.config ? JSON.parse(JSON.stringify(p.config)) : {}) };
     c.name = `${c.name} (copy)`;
     setCurrent(null);
     setCfg(c);

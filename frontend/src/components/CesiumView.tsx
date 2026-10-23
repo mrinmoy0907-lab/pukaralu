@@ -2,6 +2,7 @@ import * as Cesium from "cesium";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { BAND_COLOURS, LAYER_GROUPS, POINT_SYMBOL, TYPE_STYLE, bandIndex } from "../lib/colors";
 import { denseFrame, fmtTime, frameIndex } from "../lib/replay";
+import { basemapFor } from "../lib/basemaps";
 import { sampleHeight, tileHeights } from "../lib/terrain";
 import { useStore } from "../store";
 import type { Feature, RunData, Terrain } from "../types";
@@ -62,6 +63,8 @@ export default function CesiumView({ runId, syncId, title }: Props) {
   const viewerRef = useRef<Cesium.Viewer | null>(null);
   const featuresDs = useRef<Cesium.CustomDataSource | null>(null);
   const overlayDs = useRef<Cesium.CustomDataSource | null>(null);
+  const modelsDs = useRef<Cesium.CustomDataSource | null>(null);
+  const calcDs = useRef<Cesium.CustomDataSource | null>(null);
   const points = useRef<Cesium.PointPrimitiveCollection | null>(null);
   const pointById = useRef<Map<number, Cesium.PointPrimitive>>(new Map());
   const densityPrim = useRef<Cesium.Primitive | null>(null);
@@ -83,6 +86,11 @@ export default function CesiumView({ runId, syncId, title }: Props) {
   const profiles = useStore((s) => s.profiles);
   const time = useStore((s) => s.time);
   const set = useStore((s) => s.set);
+  const basemap = useStore((s) => s.basemap);
+  const baseLayers = useStore((s) => s.baseLayers);
+  const focus = useStore((s) => s.focus);
+  const areaCalc = useStore((s) => s.areaCalc);
+  const snapping = useStore((s) => s.snapping);
 
   const bands: number[] = useMemo(
     () => (runData?.run.threshold_profile?.density_bands as number[]) ?? profiles[0]?.values.density_bands ?? [0.5, 1, 1.5, 2, 3, 4, 5],
@@ -111,8 +119,12 @@ export default function CesiumView({ runId, syncId, title }: Props) {
     (viewer.cesiumWidget.creditContainer as HTMLElement).style.fontSize = "10px";
     featuresDs.current = new Cesium.CustomDataSource("features");
     overlayDs.current = new Cesium.CustomDataSource("overlays");
+    modelsDs.current = new Cesium.CustomDataSource("models");
+    calcDs.current = new Cesium.CustomDataSource("area");
     viewer.dataSources.add(featuresDs.current);
+    viewer.dataSources.add(calcDs.current);
     viewer.dataSources.add(overlayDs.current);
+    viewer.dataSources.add(modelsDs.current);
     points.current = viewer.scene.primitives.add(new Cesium.PointPrimitiveCollection());
     viewerRef.current = viewer;
 
@@ -152,38 +164,126 @@ export default function CesiumView({ runId, syncId, title }: Props) {
     };
   }, [syncId]);
 
-  // ------------------------------------------------------------------ basemap & terrain
+  // ------------------------------------------------------------------ basemap, imagery, terrain, 3D assets
   useEffect(() => {
     const viewer = viewerRef.current;
     if (!viewer || !site) return;
     viewer.imageryLayers.removeAll();
-    const custom = import.meta.env.VITE_BASEMAP_URL as string | undefined;
-    if (site.basemap === "osm" || custom) {
+    const bm = basemapFor(basemap);
+    if (bm.url) {
       viewer.imageryLayers.addImageryProvider(
-        new Cesium.UrlTemplateImageryProvider({
-          url: custom || "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
-          credit: new Cesium.Credit(custom ? (import.meta.env.VITE_BASEMAP_ATTRIBUTION as string) || "Basemap" : "© OpenStreetMap contributors"),
-          maximumLevel: 19,
-        }),
+        new Cesium.UrlTemplateImageryProvider({ url: bm.url, credit: new Cesium.Credit(bm.attribution), maximumLevel: bm.maxZoom }),
+      );
+    } else {
+      viewer.imageryLayers.addImageryProvider(
+        new Cesium.GridImageryProvider({ cells: 4, color: Cesium.Color.fromCssColorString("#ffffff").withAlpha(0.12), glowWidth: 0, backgroundColor: Cesium.Color.TRANSPARENT }),
       );
     }
-    viewer.imageryLayers.addImageryProvider(
-      new Cesium.GridImageryProvider({ cells: 4, color: Cesium.Color.fromCssColorString("#ffffff").withAlpha(0.12), glowWidth: 0, backgroundColor: Cesium.Color.TRANSPARENT }),
-    );
-    viewer.terrainProvider = terrain ? makeTerrain(terrain) : new Cesium.EllipsoidTerrainProvider();
-    if (site.tileset_url) {
-      Cesium.Cesium3DTileset.fromUrl(site.tileset_url)
-        .then((ts) => viewer.scene.primitives.add(ts))
-        .catch(() => useStore.getState().toast("error", "Could not load the site's 3D Tiles tileset"));
+    let cancelled = false;
+    if (baseLayers.imagery) {
+      for (const im of site.assets?.imagery ?? []) {
+        Cesium.SingleTileImageryProvider.fromUrl(im.url, { rectangle: Cesium.Rectangle.fromDegrees(im.west, im.south, im.east, im.north), credit: im.attribution })
+          .then((prov) => !cancelled && viewer.imageryLayers.addImageryProvider(prov))
+          .catch(() => useStore.getState().toast("error", `Could not load orthophoto ${im.name}`));
+      }
     }
-  }, [site, terrain]);
+    const turl = site.assets?.terrain_url;
+    if (baseLayers.terrain && turl) {
+      Cesium.CesiumTerrainProvider.fromUrl(turl)
+        .then((tp) => !cancelled && (viewer.terrainProvider = tp))
+        .catch(() => {
+          useStore.getState().toast("error", "Could not load the quantized-mesh terrain; using the DEM heightmap");
+          if (!cancelled) viewer.terrainProvider = terrain ? makeTerrain(terrain) : new Cesium.EllipsoidTerrainProvider();
+        });
+    } else {
+      viewer.terrainProvider = baseLayers.terrain && terrain ? makeTerrain(terrain) : new Cesium.EllipsoidTerrainProvider();
+    }
+    const added: Cesium.Cesium3DTileset[] = [];
+    if (baseLayers.tiles3d) {
+      const urls = [...(site.assets?.tilesets ?? []).map((t) => t.url), ...(site.tileset_url ? [site.tileset_url] : [])];
+      for (const u of urls) {
+        Cesium.Cesium3DTileset.fromUrl(u)
+          .then((ts) => {
+            if (cancelled) return ts.destroy();
+            added.push(viewer.scene.primitives.add(ts));
+          })
+          .catch(() => useStore.getState().toast("error", `Could not load 3D Tiles ${u}`));
+      }
+    }
+    return () => {
+      cancelled = true;
+      for (const t of added) if (!viewer.isDestroyed()) viewer.scene.primitives.remove(t);
+    };
+  }, [site, terrain, basemap, baseLayers.imagery, baseLayers.terrain, baseLayers.tiles3d]);
+
+  // glTF models placed from the data folder manifest
+  useEffect(() => {
+    const ds = modelsDs.current;
+    if (!ds || !site) return;
+    ds.entities.removeAll();
+    if (!baseLayers.models) return;
+    for (const m of site.assets?.models ?? []) {
+      const pos = Cesium.Cartesian3.fromDegrees(m.lon, m.lat, m.height + (m.height === 0 ? sampleHeight(terrain, m.lon, m.lat) : 0));
+      ds.entities.add({
+        name: m.name,
+        position: pos,
+        orientation: Cesium.Transforms.headingPitchRollQuaternion(pos, new Cesium.HeadingPitchRoll(Cesium.Math.toRadians(m.heading_deg), 0, 0)) as any,
+        model: { uri: m.url, scale: m.scale, minimumPixelSize: 24 },
+      });
+    }
+  }, [site, terrain, baseLayers.models]);
+
+  // fly to a searched / focused feature
+  useEffect(() => {
+    const viewer = viewerRef.current;
+    if (!viewer || !focus) return;
+    const f = features.find((x) => String(x.id) === focus.fid);
+    if (!f) return;
+    const flat = JSON.stringify(f.geometry.coordinates).match(/-?\d+\.?\d*(e-?\d+)?/g)?.map(Number) ?? [];
+    let w = 180, s = 90, e = -180, n = -90;
+    for (let i = 0; i + 1 < flat.length; i += 2) {
+      w = Math.min(w, flat[i]); e = Math.max(e, flat[i]);
+      s = Math.min(s, flat[i + 1]); n = Math.max(n, flat[i + 1]);
+    }
+    const c = Cesium.Cartesian3.fromDegrees((w + e) / 2, (s + n) / 2, sampleHeight(terrain, (w + e) / 2, (s + n) / 2));
+    const r = Math.max(60, Cesium.Cartesian3.distance(Cesium.Cartesian3.fromDegrees(w, s), Cesium.Cartesian3.fromDegrees(e, n)));
+    viewer.camera.flyToBoundingSphere(new Cesium.BoundingSphere(c, r), { offset: new Cesium.HeadingPitchRange(0, Cesium.Math.toRadians(-45), r * 2.2), duration: 1.2 });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focus]);
+
+  // area-calculation overlay (walkable / water / obstructions / barricades within the selected zone)
+  useEffect(() => {
+    const ds = calcDs.current;
+    if (!ds) return;
+    ds.entities.removeAll();
+    if (!areaCalc) return;
+    const colours: Record<string, Cesium.Color> = {
+      walkable: Cesium.Color.fromCssColorString("#22c55e").withAlpha(0.55),
+      water: Cesium.Color.fromCssColorString("#60a5fa").withAlpha(0.55),
+      obstructions: Cesium.Color.fromCssColorString("#ef4444").withAlpha(0.7),
+      barricades: Cesium.Color.fromCssColorString("#f97316").withAlpha(0.8),
+    };
+    for (const [k, g] of Object.entries(areaCalc.area.geometries ?? {})) {
+      if (!g) continue;
+      const polys: [number, number][][][] = g.type === "Polygon" ? [g.coordinates] : g.type === "MultiPolygon" ? g.coordinates : [];
+      for (const rings of polys)
+        ds.entities.add({
+          polygon: {
+            hierarchy: new Cesium.PolygonHierarchy(Cesium.Cartesian3.fromDegreesArray(rings[0].flat()), rings.slice(1).map((r) => new Cesium.PolygonHierarchy(Cesium.Cartesian3.fromDegreesArray(r.flat())))),
+            material: colours[k],
+            classificationType: Cesium.ClassificationType.TERRAIN,
+          },
+        });
+    }
+  }, [areaCalc]);
 
   // fly to the site when it changes
   useEffect(() => {
     const viewer = viewerRef.current;
     if (!viewer || !site || !features.length) return;
     let w = 180, s = 90, e = -180, n = -90;
-    for (const f of features) {
+    const core = features.filter((f) => !["river", "terrain_extent", "road"].includes(f.properties.pk_type));
+    for (const f of core.length ? core : features) {
       const flat = JSON.stringify(f.geometry.coordinates).match(/-?\d+\.?\d*(e-?\d+)?/g)?.map(Number) ?? [];
       for (let i = 0; i + 1 < flat.length; i += 2) {
         w = Math.min(w, flat[i]); e = Math.max(e, flat[i]);
@@ -230,7 +330,11 @@ export default function CesiumView({ runId, syncId, title }: Props) {
               rings.slice(1).map((r) => new Cesium.PolygonHierarchy(ringPositions(r, null, null))),
             );
             const fill = isSel ? Cesium.Color.YELLOW.withAlpha(0.7) : cssColor(st.fill);
-            if (OBSTACLE_EXTRUDE.has(t)) {
+            const topoBad = snapping.showTopology && f.properties.topology_valid === false;
+            if (topoBad) {
+              ds.entities.add({ polyline: { positions: Cesium.Cartesian3.fromDegreesArray(outer.flat()), width: 4, clampToGround: true, material: new Cesium.PolylineDashMaterialProperty({ color: Cesium.Color.RED }) } });
+            }
+            if (OBSTACLE_EXTRUDE.has(t) && baseLayers.buildings) {
               const base = Math.min(...outer.map(([x, y]) => sampleHeight(terrain, x, y)));
               ds.entities.add({
                 id: k ? `${id}#${k}` : id,
@@ -305,7 +409,7 @@ export default function CesiumView({ runId, syncId, title }: Props) {
       }
     }
     ds.entities.resumeEvents();
-  }, [features, hidden, selected, terrain, runData]);
+  }, [features, hidden, selected, terrain, runData, baseLayers.buildings, snapping.showTopology]);
 
   // ------------------------------------------------------------------ static overlays (network, routes, bottlenecks, links)
   useEffect(() => {
@@ -509,7 +613,6 @@ export default function CesiumView({ runId, syncId, title }: Props) {
       <div ref={container} className="cesium-container" />
       <div className="view-badges">
         {title && <span className="badge dark">{title}</span>}
-        {site?.is_synthetic && <span className="badge warn">SYNTHETIC SITE – not surveyed data</span>}
         {runData && <span className="badge sim">{runData.analysis.engine.method_type === "agent_based" ? "Agent-based simulation" : "Macroscopic flow estimate"} · SIMULATED</span>}
         <span className="badge dark" ref={timeLabel} />
       </div>

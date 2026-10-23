@@ -1,12 +1,11 @@
 import { useMemo, useState } from "react";
 import { api } from "../api";
-import { LAYER_GROUPS, TYPE_STYLE } from "../lib/colors";
 import { fmtNum, fmtTime } from "../lib/replay";
 import { useStore } from "../store";
 import { Check, MultiCheck, Section, Sel } from "./ui";
 
 export default function LayersPanel() {
-  const { meta, hiddenGroups, overlays, features, site, drawType, network, routeResult, set, toast, fail } = useStore();
+  const { meta, overlays, features, site, network, routeResult, set, toast, fail } = useStore();
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [k, setK] = useState(3);
@@ -52,16 +51,14 @@ export default function LayersPanel() {
 
   return (
     <div>
-      <Section title="Site layers">
-        {LAYER_GROUPS.map((g) => {
-          const n = g.types.reduce((a, t) => a + (counts[t] ?? 0), 0);
-          return (
-            <div key={g.key} className="layer-row">
-              <Check label={`${g.label} (${n})`} checked={!hiddenGroups[g.key]} onChange={(v) => set({ hiddenGroups: { ...hiddenGroups, [g.key]: !v } })} />
-              <span className="swatch" style={{ background: TYPE_STYLE[g.types[0]]?.fill, borderColor: TYPE_STYLE[g.types[0]]?.stroke }} />
-            </div>
-          );
-        })}
+      <h2 className="page-title">Planning workbench</h2>
+      <p className="muted small">Use the map toolbar to select, draw zones, obstructions, gates (More… for corridors, holding areas, ghats, barricades …), edit vertices and delete. Drawing and editing use the 2D map; layers and basemap are in the Layers menu.</p>
+      <Section title="Feature counts">
+        <div className="chips">
+          {Object.entries(counts).sort((a, b) => b[1] - a[1]).map(([t, n]) => (
+            <span key={t} className="pill neutral">{meta?.feature_types[t]?.label ?? t}: {n}</span>
+          ))}
+        </div>
       </Section>
       <Section title="Simulation overlays">
         <Check label="Animated agents (agent-based runs)" checked={overlays.agents} onChange={(v) => set({ overlays: { ...overlays, agents: v } })} />
@@ -79,28 +76,7 @@ export default function LayersPanel() {
           </div>
         )}
       </Section>
-      <Section title="Draw / edit site features" open={false}>
-        <p className="muted small">Pick a type, then draw on the 2D map (click to add vertices, double-click to finish). Select a feature to edit its attributes or drag its vertices.</p>
-        <div className="tool-grid">
-          {meta &&
-            Object.entries(meta.feature_types).map(([key, ft]) => (
-              <button
-                key={key}
-                className={drawType === key ? "active" : ""}
-                onClick={() => set({ drawType: drawType === key ? null : key, view: "2d" })}
-                title={`${ft.label} (${ft.geom})`}
-              >
-                {ft.label}
-              </button>
-            ))}
-        </div>
-        {drawType && (
-          <button className="secondary" onClick={() => set({ drawType: null })}>
-            Stop drawing
-          </button>
-        )}
-      </Section>
-      <Section title="Route explorer (alternative routes)" open={false}>
+      <Section title="Route explorer (alternative routes)">
         <Sel label="From" value={from} options={nodesOpts} onChange={setFrom} allowEmpty="— select —" />
         <Sel label="To" value={to} options={nodesOpts} onChange={setTo} allowEmpty="— select —" />
         <Sel label="Alternatives" value={String(k)} options={[1, 2, 3, 4, 5].map((x) => ({ value: String(x), label: String(x) }))} onChange={(v) => setK(Number(v))} />

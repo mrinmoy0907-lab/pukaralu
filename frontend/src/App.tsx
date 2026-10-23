@@ -1,105 +1,119 @@
-import { lazy, Suspense, useEffect } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
+import { api } from "./api";
 import AboutPanel from "./components/AboutPanel";
 import ComparePanel from "./components/ComparePanel";
-import ErrorBoundary from "./components/ErrorBoundary";
 import DataPanel from "./components/DataPanel";
-import Inspector from "./components/Inspector";
+import ErrorBoundary from "./components/ErrorBoundary";
+import Icon from "./components/Icon";
 import LayersPanel from "./components/LayersPanel";
+import { FeedsPage, OverviewPage, ReportsPage, UseCasesPage } from "./components/Pages";
 import ResultsPanel from "./components/ResultsPanel";
 import RunsPanel from "./components/RunsPanel";
 import ScenarioPanel from "./components/ScenarioPanel";
+import { MapToolbar, NavRail, SnappingCard, TopBar } from "./components/Shell";
 import Timeline from "./components/Timeline";
-import { useStore, type Tab } from "./store";
+import { RightPanel, ZoneRegister, ZonesGuide } from "./components/Zones";
+import { featureById, useStore } from "./store";
 
 const CesiumView = lazy(() => import("./components/CesiumView"));
 const PlanMap = lazy(() => import("./components/PlanMap"));
 
-const TABS: { key: Tab; label: string }[] = [
-  { key: "layers", label: "Layers & tools" },
-  { key: "scenarios", label: "Scenarios" },
-  { key: "runs", label: "Runs" },
-  { key: "results", label: "Results" },
-  { key: "compare", label: "Compare" },
-  { key: "data", label: "Data" },
-  { key: "about", label: "Method & limits" },
-];
+function Page() {
+  const tab = useStore((s) => s.tab);
+  switch (tab) {
+    case "overview":
+      return <OverviewPage />;
+    case "usecases":
+      return <UseCasesPage />;
+    case "workbench":
+      return <LayersPanel />;
+    case "zones":
+      return <ZonesGuide />;
+    case "scenarios":
+      return <ScenarioPanel />;
+    case "runs":
+      return <RunsPanel />;
+    case "results":
+      return <ResultsPanel />;
+    case "compare":
+      return <ComparePanel />;
+    case "feeds":
+      return <FeedsPage />;
+    case "data":
+      return <DataPanel />;
+    case "reports":
+      return <ReportsPage />;
+    case "admin":
+      return <AboutPanel />;
+  }
+}
 
 export default function App() {
-  const { init, sites, site, selectSite, tab, view, set, activeRun, compare, toasts, selected, runs } = useStore();
+  const { init, tab, view, activeRun, compare, toasts, selected, features, site, set, reloadFeatures, fail } = useStore();
+  const [navCollapsed, setNavCollapsed] = useState(false);
+  const [sheetOpen, setSheetOpen] = useState(true);
   useEffect(() => {
     init();
   }, [init]);
 
-  const running = runs.filter((r) => r.status === "running" || r.status === "queued").length;
   const split = view === "split" && compare.a && compare.b;
   const timelineRuns = split ? [compare.a!, compare.b!] : activeRun ? [activeRun] : [];
 
+  async function onDelete() {
+    const f = featureById(features, selected);
+    if (!f || !site || !confirm(`Delete ${f.properties.name ?? f.id}?`)) return;
+    try {
+      await api.deleteFeature(site.id, String(f.id));
+      set({ selected: null, areaCalc: null });
+      await reloadFeatures();
+    } catch (e) {
+      fail(e, "Deleting feature");
+    }
+  }
+
   return (
     <div className="app">
-      <header className="topbar">
-        <div className="brand">
-          Pushkaralu Crowd Digital Twin <small>open-source 3D GIS · crowd simulation · evacuation planning</small>
-        </div>
-        <select value={site?.id ?? ""} onChange={(e) => selectSite(Number(e.target.value))} title="site">
-          {sites.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.is_synthetic ? "[SYNTHETIC] " : ""}
-              {s.name}
-            </option>
-          ))}
-        </select>
-        <div className="seg">
-          <button className={view === "3d" ? "active" : ""} onClick={() => set({ view: "3d" })}>
-            3D operational
+      <NavRail collapsed={navCollapsed} />
+      <div className="main-col">
+        <TopBar onMenu={() => setNavCollapsed(!navCollapsed)} />
+        <div className="workspace">
+          {sheetOpen && (
+            <section className="sheet">
+              <Page />
+            </section>
+          )}
+          <button className="sheet-toggle" onClick={() => setSheetOpen(!sheetOpen)} title={sheetOpen ? "Hide panel" : "Show panel"}>
+            {sheetOpen ? "‹" : "›"}
           </button>
-          <button className={view === "2d" ? "active" : ""} onClick={() => set({ view: "2d" })}>
-            2D planning
-          </button>
-          <button className={view === "split" ? "active" : ""} disabled={!compare.a || !compare.b} onClick={() => set({ view: "split" })} title="Choose a baseline and an alternative run first">
-            Compare 3D
-          </button>
-        </div>
-        {running > 0 && <span className="badge sim">{running} simulation(s) running</span>}
-      </header>
-      <div className="body">
-        <nav className="sidebar">
-          <div className="tabs">
-            {TABS.map((t) => (
-              <button key={t.key} className={tab === t.key ? "active" : ""} onClick={() => set({ tab: t.key })}>
-                {t.label}
+          <div className="map-area">
+            {!split && <MapToolbar onDelete={onDelete} />}
+            <SnappingCard />
+            <div className="views">
+              <ErrorBoundary label="The map" key={view}>
+                <Suspense fallback={<div className="loading">Loading map…</div>}>
+                  {split ? (
+                    <div className="split">
+                      <CesiumView key="a" runId={compare.a} syncId="a" title="Baseline" />
+                      <CesiumView key="b" runId={compare.b} syncId="b" title="Alternative" />
+                    </div>
+                  ) : view === "2d" ? (
+                    <PlanMap runId={activeRun} />
+                  ) : (
+                    <CesiumView key="main" runId={activeRun} />
+                  )}
+                </Suspense>
+              </ErrorBoundary>
+              {!split && <RightPanel />}
+            </div>
+            {tab === "zones" && !split && <ZoneRegister />}
+            {split && (
+              <button className="exit-split" onClick={() => set({ view: "3d" })}>
+                <Icon name="close" /> Exit comparison view
               </button>
-            ))}
+            )}
+            <Timeline runIds={timelineRuns} />
           </div>
-          <div className="panel">
-            {tab === "layers" && <LayersPanel />}
-            {tab === "scenarios" && <ScenarioPanel />}
-            {tab === "runs" && <RunsPanel />}
-            {tab === "results" && <ResultsPanel />}
-            {tab === "compare" && <ComparePanel />}
-            {tab === "data" && <DataPanel />}
-            {tab === "about" && <AboutPanel />}
-          </div>
-        </nav>
-        <main className="main">
-          <div className="views">
-            <ErrorBoundary label="The viewer" key={view}>
-            <Suspense fallback={<div className="loading">Loading viewer…</div>}>
-              {split ? (
-                <div className="split">
-                  <CesiumView key="a" runId={compare.a} syncId="a" title="Baseline" />
-                  <CesiumView key="b" runId={compare.b} syncId="b" title="Alternative" />
-                </div>
-              ) : view === "2d" ? (
-                <PlanMap runId={activeRun} />
-              ) : (
-                <CesiumView key="main" runId={activeRun} />
-              )}
-            </Suspense>
-            </ErrorBoundary>
-            {selected && !split && <Inspector />}
-          </div>
-          <Timeline runIds={timelineRuns} />
-        </main>
+        </div>
       </div>
       <div className="toasts">
         {toasts.map((t) => (

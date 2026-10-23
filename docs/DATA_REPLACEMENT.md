@@ -70,5 +70,6 @@ ogr2ogr -f GPKG paths.gpkg footpaths.shp -t_srs EPSG:32644 -sql \
 
 ## 4. Remove the demo data
 
-Delete the synthetic site from the database (`DELETE /api/sites/{id}`), or start
-with `PK_SEED_DEMO_DATA=false` on a fresh database.
+Delete the demo folders `data/sites/01_…`, `02_…`, `03_…` and the demo sites in the
+application (`DELETE /api/sites/{id}`), or start on a fresh database without those folders.
+The preferred way to bring surveyed data in is the data drop folder – see [DATA_FOLDER.md](DATA_FOLDER.md).

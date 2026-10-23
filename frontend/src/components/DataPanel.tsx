@@ -1,7 +1,7 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { api, download } from "../api";
 import { useStore } from "../store";
-import type { Observation } from "../types";
+import { DataFolderSection } from "./Pages";
 import { Check, Num, Section, Sel, Txt } from "./ui";
 
 export default function DataPanel() {
@@ -17,13 +17,8 @@ export default function DataPanel() {
   const [layer, setLayer] = useState("");
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<any>(null);
-  const [obs, setObs] = useState<Observation[]>([]);
-  const [obsFile, setObsFile] = useState<File | null>(null);
   const [ns, setNs] = useState({ name: "", lon: 81.78, lat: 17.0, synthetic: false, basemap: "osm" });
 
-  useEffect(() => {
-    if (site) api.observations(site.id).then(setObs).catch(() => setObs([]));
-  }, [site]);
 
   if (!site) return null;
   const datasets = site.datasets ?? [];
@@ -65,21 +60,10 @@ export default function DataPanel() {
     }
   }
 
-  async function uploadObs() {
-    if (!obsFile || !site) return;
-    const fd = new FormData();
-    fd.append("file", obsFile);
-    try {
-      await api.uploadObservations(site.id, fd);
-      setObs(await api.observations(site.id));
-      toast("success", "Observations uploaded.");
-    } catch (e) {
-      fail(e, "Uploading observations");
-    }
-  }
-
   return (
     <div>
+      <h2 className="page-title">Data sources</h2>
+      <DataFolderSection />
       <Section title="Site & data provenance">
         <div className="small">
           <b>{site.name}</b> {site.is_synthetic && <span className="badge warn inline">SYNTHETIC</span>}
@@ -121,7 +105,7 @@ export default function DataPanel() {
           Export all site features (GeoJSON)
         </button>
       </Section>
-      <Section title="Import GIS data">
+      <Section title="Upload a single file" open={false}>
         <p className="muted small">GeoJSON, GeoPackage, zipped Shapefile, KML (via GDAL/OGR) or a DEM raster (GeoTIFF). Vectors are reprojected to WGS84. A licence must be declared.</p>
         <input type="file" onChange={(e) => setFile(e.target.files?.[0] ?? null)} accept=".geojson,.json,.gpkg,.zip,.kml,.gml,.fgb,.tif,.tiff,.asc,.img" />
         <Txt label="Licence (required)" value={license} onChange={setLicense} />
@@ -156,30 +140,6 @@ export default function DataPanel() {
             ))}
           </div>
         )}
-      </Section>
-      <Section title="Observed / forecast counts" open={false}>
-        <p className="muted small">
-          Manual or uploaded counts (CSV columns: zone_fid, count, kind = observed|forecast, t_offset_s, observed_at, source, notes). They are shown as separate markers next to simulated values and are never mixed with them.
-          {!meta?.live_sensor_integration && " Live CCTV/IoT integration is not implemented in this release."}
-        </p>
-        <input type="file" accept=".csv" onChange={(e) => setObsFile(e.target.files?.[0] ?? null)} />
-        <button className="secondary" onClick={uploadObs} disabled={!obsFile}>
-          Upload CSV
-        </button>
-        <div className="small">{obs.length} record(s)</div>
-        <table className="tbl">
-          <tbody>
-            {obs.slice(0, 30).map((o) => (
-              <tr key={o.id}>
-                <td>{o.zone_fid}</td>
-                <td>{o.count}</td>
-                <td>{o.kind}</td>
-                <td>{o.t_offset_s ?? o.observed_at}</td>
-                <td>{o.source}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
       </Section>
       <Section title="Sites" open={false}>
         {sites.map((s) => (

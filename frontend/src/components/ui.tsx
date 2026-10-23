@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useId, type ReactNode } from "react";
 
 export function Section({ title, children, right, open = true }: { title: string; children: ReactNode; right?: ReactNode; open?: boolean }) {
   return (
@@ -15,11 +15,13 @@ export function Section({ title, children, right, open = true }: { title: string
 export function Num({ label, value, onChange, step = 1, min, max, unit, title }: {
   label: string; value: number | null | undefined; onChange: (v: number | null) => void; step?: number; min?: number; max?: number; unit?: string; title?: string;
 }) {
+  const id = useId();
   return (
-    <label className="field" title={title}>
-      <span>{label}</span>
+    <div className="field" title={title}>
+      <label htmlFor={id}>{label}</label>
       <span className="with-unit">
         <input
+          id={id}
           type="number"
           value={value ?? ""}
           step={step}
@@ -29,24 +31,26 @@ export function Num({ label, value, onChange, step = 1, min, max, unit, title }:
         />
         {unit && <em>{unit}</em>}
       </span>
-    </label>
+    </div>
   );
 }
 
 export function Txt({ label, value, onChange, area }: { label: string; value: string; onChange: (v: string) => void; area?: boolean }) {
+  const id = useId();
   return (
-    <label className="field">
-      <span>{label}</span>
-      {area ? <textarea value={value} onChange={(e) => onChange(e.target.value)} rows={3} /> : <input value={value} onChange={(e) => onChange(e.target.value)} />}
-    </label>
+    <div className="field">
+      <label htmlFor={id}>{label}</label>
+      {area ? <textarea id={id} value={value} onChange={(e) => onChange(e.target.value)} rows={3} /> : <input id={id} value={value} onChange={(e) => onChange(e.target.value)} />}
+    </div>
   );
 }
 
 export function Sel({ label, value, options, onChange, allowEmpty }: {
   label?: string; value: string | null | undefined; options: { value: string; label: string }[]; onChange: (v: string) => void; allowEmpty?: string;
 }) {
+  const id = useId();
   const sel = (
-    <select value={value ?? ""} onChange={(e) => onChange(e.target.value)}>
+    <select id={id} value={value ?? ""} onChange={(e) => onChange(e.target.value)}>
       {allowEmpty !== undefined && <option value="">{allowEmpty}</option>}
       {options.map((o) => (
         <option key={o.value} value={o.value}>
@@ -56,11 +60,13 @@ export function Sel({ label, value, options, onChange, allowEmpty }: {
     </select>
   );
   if (!label) return sel;
+  // label/select association by id: a select nested in its label would get the
+  // option texts in its accessible name
   return (
-    <label className="field">
-      <span>{label}</span>
+    <div className="field">
+      <label htmlFor={id}>{label}</label>
       {sel}
-    </label>
+    </div>
   );
 }
 

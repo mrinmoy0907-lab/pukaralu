@@ -11,10 +11,11 @@ APP_VERSION = "0.1.0"
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_prefix="PK_", env_file=".env", extra="ignore")
+    # .env is read from the repository root (and the current folder), see .env.example
+    model_config = SettingsConfigDict(env_prefix="PK_", env_file=(str(REPO_ROOT / ".env"), ".env"), extra="ignore")
 
     # SQLite works out of the box; set to postgresql+psycopg://... for PostGIS.
-    database_url: str = f"sqlite:///{REPO_ROOT / 'var' / 'pushkaralu.db'}"
+    database_url: str = f"sqlite:///{(REPO_ROOT / 'var' / 'pushkaralu.db').as_posix()}"
     results_dir: Path = REPO_ROOT / "var" / "results"
     upload_dir: Path = REPO_ROOT / "var" / "uploads"
     data_dir: Path = REPO_ROOT / "data"

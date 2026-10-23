@@ -11,3 +11,5 @@ frontend/public/cesium/
 .ruff_cache/
 playwright-report/
 test-results/
+docs/journeys/
+frontend/tsconfig.tsbuildinfo

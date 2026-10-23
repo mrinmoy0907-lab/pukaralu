@@ -115,7 +115,8 @@ def presets(site_id: int, db: Session = Depends(get_db)):
         built = build_presets(feats, (site.origin_lon, site.origin_lat))
     except SiteModelError as exc:
         raise HTTPException(422, str(exc)) from exc
-    return [{"key": k, "label": lab, "available": k in built, "config": built.get(k)} for k, lab in PRESETS]
+    full = {k: ScenarioConfig.model_validate(c).model_dump(mode="json") for k, c in built.items()}
+    return [{"key": k, "label": lab, "available": k in full, "config": full.get(k)} for k, lab in PRESETS]
 
 
 @router.post("/sites/{site_id}/presets/create", status_code=201)

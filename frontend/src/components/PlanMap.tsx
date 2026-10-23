@@ -4,11 +4,13 @@ import View from "ol/View";
 import GeoJSON from "ol/format/GeoJSON";
 import TileLayer from "ol/layer/Tile";
 import VectorLayer from "ol/layer/Vector";
+import ImageLayer from "ol/layer/Image";
 import OSM from "ol/source/OSM";
+import Static from "ol/source/ImageStatic";
 import XYZ from "ol/source/XYZ";
 import VectorSource from "ol/source/Vector";
 import { Circle as CircleStyle, Fill, Stroke, Style, Text } from "ol/style";
-import { Draw, Modify, Select } from "ol/interaction";
+import { Draw, Modify, Select, Snap } from "ol/interaction";
 import { click } from "ol/events/condition";
 import { fromLonLat } from "ol/proj";
 import Collection from "ol/Collection";
@@ -18,21 +20,12 @@ import type { FeatureLike } from "ol/Feature";
 import { LAYER_GROUPS, POINT_SYMBOL, TYPE_STYLE, densityColour } from "../lib/colors";
 import { denseFrame, frameIndex } from "../lib/replay";
 import { api } from "../api";
+import { basemapFor } from "../lib/basemaps";
 import { useStore } from "../store";
 import type { Feature } from "../types";
 
 const fmt = new GeoJSON({ dataProjection: "EPSG:4326", featureProjection: "EPSG:3857" });
 
-const DRAW_DEFAULTS: Record<string, Record<string, any>> = {
-  corridor: { width_m: 4, direction: "both", surface: "path", enabled: true },
-  emergency_corridor: { width_m: 5, direction: "both", emergency_only: true, enabled: true },
-  gate: { role: "both", width_m: 4, enabled: true },
-  holding_area: { capacity_persons: null },
-  building: { height_m: 8 },
-  temple: { height_m: 15 },
-  wall: { height_m: 2.5 },
-  barricade: { height_m: 1.1 },
-};
 
 function styleFor(f: FeatureLike, selected: string | null, resolution: number): Style | Style[] {
   const t = f.get("pk_type") as string;
@@ -56,6 +49,8 @@ function styleFor(f: FeatureLike, selected: string | null, resolution: number): 
       new Style({ stroke: new Stroke({ color: st.stroke, width: 1, lineDash: f.get("direction") !== "both" ? [6, 4] : undefined }) }),
     ];
   }
+  if (f.get("topology_valid") === false && useStore.getState().snapping.showTopology)
+    return new Style({ fill: new Fill({ color: st.fill }), stroke: new Stroke({ color: "#dc2626", width: 3, lineDash: [8, 5] }) });
   return new Style({
     fill: new Fill({ color: sel ? "rgba(255,230,0,0.5)" : st.fill }),
     stroke: new Stroke({ color: sel ? "#ffd400" : st.stroke, width: sel ? 3 : t === "wall" || t === "barricade" ? 3 : 1.2 }),
@@ -72,6 +67,17 @@ export default function PlanMap({ runId }: { runId: string | null }) {
   const baseLayer = useRef<TileLayer<any> | null>(null);
   const drawRef = useRef<Draw | null>(null);
   const modifyRef = useRef<Modify | null>(null);
+  const imageryLayers = useRef<ImageLayer<any>[]>([]);
+  const snaps = useRef<Snap[]>([]);
+  const calcSrc = useRef(new VectorSource());
+  const pendingSrc = useRef(new VectorSource());
+  const basemap = useStore((s) => s.basemap);
+  const baseLayers = useStore((s) => s.baseLayers);
+  const focus = useStore((s) => s.focus);
+  const editMode = useStore((s) => s.editMode);
+  const snapping = useStore((s) => s.snapping);
+  const areaCalc = useStore((s) => s.areaCalc);
+  const pending = useStore((s) => s.pendingGeometry);
 
   const site = useStore((s) => s.site);
   const features = useStore((s) => s.features);
@@ -99,6 +105,8 @@ export default function PlanMap({ runId }: { runId: string | null }) {
       layers: [
         baseLayer.current,
         featLayer.current,
+        new VectorLayer({ source: calcSrc.current }),
+        new VectorLayer({ source: pendingSrc.current, style: new Style({ fill: new Fill({ color: "rgba(37,99,235,0.25)" }), stroke: new Stroke({ color: "#2563eb", width: 2, lineDash: [6, 4] }), image: new CircleStyle({ radius: 7, fill: new Fill({ color: "#2563eb" }) }) }) }),
         new VectorLayer({ source: overlaySrc.current }),
         new VectorLayer({ source: simSrc.current }),
       ],
@@ -111,16 +119,73 @@ export default function PlanMap({ runId }: { runId: string | null }) {
     });
     map.addInteraction(select);
     mapRef.current = map;
+    if (import.meta.env.DEV) {
+      // hooks for the scripted user-journey screenshots (dev server only)
+      (window as any).__pkToPixel = (lon: number, lat: number) => map.getPixelFromCoordinate(fromLonLat([lon, lat]));
+      (window as any).__pkMap = map;
+    }
     return () => map.setTarget(undefined);
   }, []);
 
-  // basemap
+  // basemap and orthophoto overlays from the data folder
   useEffect(() => {
-    if (!site || !baseLayer.current) return;
-    const custom = import.meta.env.VITE_BASEMAP_URL as string | undefined;
-    if (custom) baseLayer.current.setSource(new XYZ({ url: custom, attributions: (import.meta.env.VITE_BASEMAP_ATTRIBUTION as string) || "" }));
-    baseLayer.current.setVisible(site.basemap === "osm" || !!custom);
-  }, [site]);
+    const map = mapRef.current;
+    if (!site || !baseLayer.current || !map) return;
+    const bm = basemapFor(basemap);
+    if (bm.url) {
+      baseLayer.current.setSource(new XYZ({ url: bm.url, attributions: bm.attribution, maxZoom: bm.maxZoom, crossOrigin: "anonymous" }));
+      baseLayer.current.setVisible(true);
+    } else baseLayer.current.setVisible(false);
+    for (const l of imageryLayers.current) map.removeLayer(l);
+    imageryLayers.current = [];
+    if (baseLayers.imagery)
+      (site.assets?.imagery ?? []).forEach((im, i) => {
+        const l = new ImageLayer({
+          source: new Static({ url: im.url, projection: "EPSG:4326", imageExtent: [im.west, im.south, im.east, im.north], attributions: im.attribution }),
+        });
+        map.getLayers().insertAt(1 + i, l);
+        imageryLayers.current.push(l);
+      });
+  }, [site, basemap, baseLayers.imagery]);
+
+  // fly to a searched / focused feature
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !focus) return;
+    const f = featSrc.current.getFeatureById(focus.fid);
+    const g = f?.getGeometry();
+    if (g) map.getView().fit(g.getExtent(), { padding: [120, 120, 120, 120], maxZoom: 19, duration: 600 });
+  }, [focus]);
+
+  // snapping to corridors/roads and the river edge while drawing or editing
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    for (const sn of snaps.current) map.removeInteraction(sn);
+    snaps.current = [];
+    if (!drawType && !editMode) return;
+    const types = new Set<string>();
+    if (snapping.roads) ["corridor", "emergency_corridor", "road"].forEach((t) => types.add(t));
+    if (snapping.river) ["river", "bathing_area"].forEach((t) => types.add(t));
+    if (!types.size) return;
+    const src = new VectorSource({ features: featSrc.current.getFeatures().filter((f) => types.has(f.get("pk_type"))) });
+    const sn = new Snap({ source: src, pixelTolerance: 12 });
+    map.addInteraction(sn);
+    snaps.current.push(sn);
+  }, [drawType, editMode, snapping.roads, snapping.river, features]);
+
+  // area-calculation overlay
+  useEffect(() => {
+    calcSrc.current.clear();
+    if (!areaCalc) return;
+    const colours: Record<string, string> = { walkable: "rgba(34,197,94,0.5)", water: "rgba(96,165,250,0.55)", obstructions: "rgba(239,68,68,0.65)", barricades: "rgba(249,115,22,0.8)" };
+    for (const [k, g] of Object.entries(areaCalc.area.geometries ?? {})) {
+      if (!g) continue;
+      const f = fmt.readFeature({ type: "Feature", geometry: g, properties: {} }) as OlFeature;
+      f.setStyle(new Style({ fill: new Fill({ color: colours[k] }) }));
+      calcSrc.current.addFeature(f);
+    }
+  }, [areaCalc]);
 
   // features
   useEffect(() => {
@@ -138,8 +203,11 @@ export default function PlanMap({ runId }: { runId: string | null }) {
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !features.length) return;
-    const ext = featSrc.current.getExtent();
-    if (ext && Number.isFinite(ext[0])) map.getView().fit(ext, { padding: [40, 40, 40, 40], maxZoom: 19 });
+    // fit to the operational layout; large reference layers (river, terrain extent) are ignored
+    const fs = featSrc.current.getFeatures().filter((f) => !["river", "terrain_extent", "road"].includes(f.get("pk_type")));
+    const src = new VectorSource({ features: fs.length ? fs : featSrc.current.getFeatures() });
+    const ext = src.getExtent();
+    if (ext && Number.isFinite(ext[0])) map.getView().fit(ext, { padding: [110, 60, 40, 60], maxZoom: 19 });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [site?.id, features.length > 0]);
 
@@ -152,22 +220,10 @@ export default function PlanMap({ runId }: { runId: string | null }) {
     if (!drawType || !meta || !site) return;
     const geom = meta.feature_types[drawType]?.geom ?? "Polygon";
     const draw = new Draw({ source: new VectorSource(), type: geom });
-    draw.on("drawend", async (e) => {
+    draw.on("drawend", (e) => {
+      // the properties form (Zone Properties / New feature) completes the feature
       const gj = JSON.parse(fmt.writeFeature(e.feature)) as Feature;
-      const name = window.prompt(`Name for the new ${meta.feature_types[drawType].label}:`, meta.feature_types[drawType].label);
-      if (name === null) return;
-      try {
-        const created = await api.createFeature(site.id, {
-          type: "Feature",
-          geometry: gj.geometry,
-          properties: { pk_type: drawType, name, ...(DRAW_DEFAULTS[drawType] ?? {}) },
-        });
-        await useStore.getState().reloadFeatures();
-        useStore.getState().set({ selected: String(created.id) });
-        useStore.getState().toast("success", `Added ${name}. Edit its attributes in the inspector.`);
-      } catch (err) {
-        useStore.getState().fail(err, "Saving feature");
-      }
+      useStore.getState().set({ pendingGeometry: { geometry: gj.geometry, pk_type: drawType }, drawType: null, selected: null });
     });
     map.addInteraction(draw);
     drawRef.current = draw;
@@ -179,7 +235,7 @@ export default function PlanMap({ runId }: { runId: string | null }) {
     if (!map) return;
     if (modifyRef.current) map.removeInteraction(modifyRef.current);
     modifyRef.current = null;
-    if (!selected || drawType || !site) return;
+    if (!selected || drawType || !site || !editMode) return;
     const f = featSrc.current.getFeatureById(selected);
     if (!f) return;
     const modify = new Modify({ features: new Collection([f]) });
@@ -197,7 +253,13 @@ export default function PlanMap({ runId }: { runId: string | null }) {
     });
     map.addInteraction(modify);
     modifyRef.current = modify;
-  }, [selected, drawType, site, features]);
+  }, [selected, drawType, site, features, editMode]);
+
+  // geometry drawn but not yet saved
+  useEffect(() => {
+    pendingSrc.current.clear();
+    if (pending) pendingSrc.current.addFeature(fmt.readFeature({ type: "Feature", geometry: pending.geometry, properties: {} }) as OlFeature);
+  }, [pending]);
 
   // static overlays: network, routes, bottlenecks
   useEffect(() => {
@@ -268,9 +330,8 @@ export default function PlanMap({ runId }: { runId: string | null }) {
     <div className="plan-wrap">
       <div ref={el} className="plan-map" />
       <div className="view-badges">
-        {site?.is_synthetic && <span className="badge warn">SYNTHETIC SITE – not surveyed data</span>}
-        {drawType && <span className="badge dark">Drawing: {meta?.feature_types[drawType]?.label} – double-click to finish</span>}
-        {site && site.basemap === "osm" && <span className="badge dark">© OpenStreetMap contributors</span>}
+        {drawType && <span className="badge dark">Drawing: {meta?.feature_types[drawType]?.label} – click to add points, double-click to finish</span>}
+        {editMode && selected && <span className="badge dark">Edit: drag vertices of the selected feature</span>}
       </div>
     </div>
   );

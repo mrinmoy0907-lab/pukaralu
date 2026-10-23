@@ -5,6 +5,7 @@ import { emptyConfig, expectedPopulation, precheck } from "./scenario";
 import { sampleHeight, tileHeights } from "./terrain";
 import type { Feature, GridDoc, Terrain } from "../types";
 import { errorDetails } from "../api";
+import { basemapFor, BASEMAPS } from "./basemaps";
 
 describe("replay", () => {
   it("finds the frame at or before t", () => {
@@ -90,5 +91,13 @@ describe("API error formatting", () => {
     expect(errorDetails({ detail: "boom" })).toEqual(["boom"]);
     expect(errorDetails({ detail: { errors: ["a", "b"] } })).toEqual(["a", "b"]);
     expect(errorDetails({ detail: [{ loc: ["body", "x"], msg: "bad" }] })).toEqual(["x: bad"]);
+  });
+});
+
+describe("basemaps", () => {
+  it("falls back to the first basemap and offers a neutral option", () => {
+    expect(basemapFor("nope").key).toBe(BASEMAPS[0].key);
+    expect(basemapFor("satellite").real).toBe(true);
+    expect(basemapFor("grid").url).toBeNull();
   });
 });

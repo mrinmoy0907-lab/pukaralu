@@ -96,7 +96,7 @@ def test_zone_area_topology_and_approval(client):
     a = client.post(f"/api/sites/{sid}/zones/sector_c/area").json()
     ar = a["area"]
     assert ar["water_excluded_m2"] == pytest.approx(80 * 18, rel=0.02)  # 30 m of river minus the 12 m bathing strip
-    assert ar["obstructions_m2"] == pytest.approx(60 * 38, rel=0.02)  # synthetic temple 60 x 38 m
+    assert ar["obstructions_m2"] == pytest.approx(60 * 38 + 2 * 8 * 4, rel=0.02)  # temple 60 x 38 m + two 8 x 4 m stalls
     assert ar["net_walkable_m2"] < ar["gross_m2"]
     assert a["topology"]["valid"]
     # overlapping sibling zone -> topology error -> cannot be activated

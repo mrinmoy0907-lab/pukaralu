@@ -16,6 +16,25 @@ import type {
   ThresholdProfile,
 } from "./types";
 
+export interface ZoneRow {
+  fid: string;
+  name: string;
+  pk_type: string;
+  zone_type: string;
+  parent_id: string | null;
+  owner_department: string | null;
+  status: string;
+  valid_from: string | null;
+  valid_to: string | null;
+  approved_by: string | null;
+  effective_from: string | null;
+  effective_to: string | null;
+  net_walkable_m2: number;
+  gross_m2: number;
+  capacity_persons: number | null;
+  synthetic: boolean;
+}
+
 export class ApiError extends Error {
   status: number;
   details: string[];
@@ -102,6 +121,12 @@ export const api = {
   observations: (siteId: number) => req<Observation[]>("GET", `/api/sites/${siteId}/observations`),
   uploadObservations: (siteId: number, fd: FormData) => req<Observation[]>("POST", `/api/sites/${siteId}/observations/csv`, fd),
   addObservations: (siteId: number, items: Partial<Observation>[]) => req<Observation[]>("POST", `/api/sites/${siteId}/observations`, items),
+  ingest: () => req<any>("POST", "/api/ingest"),
+  ingestStatus: () => req<any>("GET", "/api/ingest"),
+  zones: (siteId: number) => req<{ zones: ZoneRow[]; zone_types: string[] }>("GET", `/api/sites/${siteId}/zones`),
+  zoneArea: (siteId: number, fid: string) => req<any>("POST", `/api/sites/${siteId}/zones/${encodeURIComponent(fid)}/area`),
+  approveZones: (siteId: number, b: { fids: string[]; status: string; approved_by?: string; approval_remarks?: string; effective_from?: string; effective_to?: string }) =>
+    req<any>("POST", `/api/sites/${siteId}/zones/approve`, b),
   profiles: () => req<ThresholdProfile[]>("GET", "/api/threshold-profiles"),
   updateProfile: (id: number, b: Omit<ThresholdProfile, "id">) => req<ThresholdProfile>("PUT", `/api/threshold-profiles/${id}`, b),
 };

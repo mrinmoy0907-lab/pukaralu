@@ -45,6 +45,7 @@
     "pk_type": "bathing_area",
     "name": "Main Ghat bathing area",
     "height_m": 0,
+    "owner_department": "Mela Administration",
     "source": "synthetic",
     "synthetic": true
    }
@@ -120,6 +121,7 @@
     "pk_type": "ghat",
     "name": "Main Ghat steps",
     "surface": "steps",
+    "owner_department": "Mela Administration",
     "source": "synthetic",
     "synthetic": true
    }
@@ -195,6 +197,7 @@
    "properties": {
     "pk_type": "plaza",
     "name": "Ghat front plaza",
+    "owner_department": "Municipal Corporation",
     "source": "synthetic",
     "synthetic": true
    }
@@ -472,8 +475,8 @@
       17.003641186207684
      ],
      [
-      81.76883236452836,
-      17.00364275002993
+      81.76879480185578,
+      17.003642402525994
      ]
     ]
    },
@@ -481,6 +484,240 @@
     "pk_type": "barricade",
     "name": "Queue barricade",
     "height_m": 1.1,
+    "source": "synthetic",
+    "synthetic": true
+   }
+  },
+  {
+   "type": "Feature",
+   "id": "stall_1",
+   "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+     [
+      [
+       81.76883037763888,
+       17.002901751125798
+      ],
+      [
+       81.76886794016394,
+       17.002902098623192
+      ],
+      [
+       81.7688686624663,
+       17.0028298145198
+      ],
+      [
+       81.76883109995563,
+       17.002829467022526
+      ],
+      [
+       81.76883037763888,
+       17.002901751125798
+      ]
+     ]
+    ]
+   },
+   "properties": {
+    "pk_type": "obstacle",
+    "name": "Stall 1",
+    "obstruction_type": "stall",
+    "height_m": 3,
+    "source": "synthetic",
+    "synthetic": true
+   }
+  },
+  {
+   "type": "Feature",
+   "id": "stall_2",
+   "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+     [
+      [
+       81.7688258631466,
+       17.00335352675955
+      ],
+      [
+       81.76886342576168,
+       17.00335387425776
+      ],
+      [
+       81.7688641480675,
+       17.00328159015758
+      ],
+      [
+       81.76882658546681,
+       17.0032812426595
+      ],
+      [
+       81.7688258631466,
+       17.00335352675955
+      ]
+     ]
+    ]
+   },
+   "properties": {
+    "pk_type": "obstacle",
+    "name": "Stall 2",
+    "obstruction_type": "stall",
+    "height_m": 3,
+    "source": "synthetic",
+    "synthetic": true
+   }
+  },
+  {
+   "type": "Feature",
+   "id": "stall_3",
+   "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+     [
+      [
+       81.76882134863271,
+       17.003805302373188
+      ],
+      [
+       81.7688589113378,
+       17.00380564987221
+      ],
+      [
+       81.76885963364707,
+       17.00373336577525
+      ],
+      [
+       81.76882207095639,
+       17.00373301827636
+      ],
+      [
+       81.76882134863271,
+       17.003805302373188
+      ]
+     ]
+    ]
+   },
+   "properties": {
+    "pk_type": "obstacle",
+    "name": "Stall 3",
+    "obstruction_type": "stall",
+    "height_m": 3,
+    "source": "synthetic",
+    "synthetic": true
+   }
+  },
+  {
+   "type": "Feature",
+   "id": "stall_4",
+   "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+     [
+      [
+       81.76881683409721,
+       17.004257077966702
+      ],
+      [
+       81.76885439689231,
+       17.004257425466538
+      ],
+      [
+       81.76885511920504,
+       17.00418514137281
+      ],
+      [
+       81.76881755642435,
+       17.004184793873094
+      ],
+      [
+       81.76881683409721,
+       17.004257077966702
+      ]
+     ]
+    ]
+   },
+   "properties": {
+    "pk_type": "obstacle",
+    "name": "Stall 4",
+    "obstruction_type": "stall",
+    "height_m": 3,
+    "source": "synthetic",
+    "synthetic": true
+   }
+  },
+  {
+   "type": "Feature",
+   "id": "stall_5",
+   "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+     [
+      [
+       81.76881231954012,
+       17.004708853540105
+      ],
+      [
+       81.76884988242522,
+       17.004709201040757
+      ],
+      [
+       81.7688506047414,
+       17.004636916950236
+      ],
+      [
+       81.7688130418707,
+       17.004636569449712
+      ],
+      [
+       81.76881231954012,
+       17.004708853540105
+      ]
+     ]
+    ]
+   },
+   "properties": {
+    "pk_type": "obstacle",
+    "name": "Stall 5",
+    "obstruction_type": "stall",
+    "height_m": 3,
+    "source": "synthetic",
+    "synthetic": true
+   }
+  },
+  {
+   "type": "Feature",
+   "id": "stall_6",
+   "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+     [
+      [
+       81.76880852729543,
+       17.00508834500621
+      ],
+      [
+       81.76884609025616,
+       17.005088692507552
+      ],
+      [
+       81.76884681257525,
+       17.005016408419735
+      ],
+      [
+       81.76880924962893,
+       17.00501606091852
+      ],
+      [
+       81.76880852729543,
+       17.00508834500621
+      ]
+     ]
+    ]
+   },
+   "properties": {
+    "pk_type": "obstacle",
+    "name": "Stall 6",
+    "obstruction_type": "stall",
+    "height_m": 3,
     "source": "synthetic",
     "synthetic": true
    }
@@ -519,6 +756,7 @@
     "pk_type": "holding_area",
     "name": "Holding Area West",
     "capacity_persons": 9000,
+    "owner_department": "Police Department",
     "source": "synthetic",
     "synthetic": true
    }
@@ -557,6 +795,7 @@
     "pk_type": "holding_area",
     "name": "Holding Area East",
     "capacity_persons": 9000,
+    "owner_department": "Police Department",
     "source": "synthetic",
     "synthetic": true
    }
@@ -594,6 +833,7 @@
    "properties": {
     "pk_type": "bus_terminal",
     "name": "Synthetic bus terminal",
+    "owner_department": "Transport Department",
     "source": "synthetic",
     "synthetic": true
    }
@@ -668,6 +908,7 @@
    "properties": {
     "pk_type": "assembly_point",
     "name": "Assembly Point West",
+    "owner_department": "Fire & Emergency Services",
     "source": "synthetic",
     "synthetic": true
    }

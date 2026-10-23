@@ -51,15 +51,15 @@ export function TimeChart({ title, unit, series, times, now, limit, observations
       </div>
       <ResponsiveContainer width="100%" height={height}>
         <ComposedChart data={rows} margin={{ top: 4, right: 12, bottom: 0, left: -8 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#334" />
+          <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
           <XAxis dataKey="t" type="number" domain={["dataMin", "dataMax"]} tick={{ fontSize: 10 }} tickFormatter={(v) => `${Math.round(v / 60)}m`} />
           <YAxis tick={{ fontSize: 10 }} />
-          <Tooltip labelFormatter={(v) => `t = ${Math.round(Number(v))} s`} contentStyle={{ background: "#1b2330", border: "1px solid #345", fontSize: 11 }} />
+          <Tooltip labelFormatter={(v) => `t = ${Math.round(Number(v))} s`} contentStyle={{ background: "#fff", border: "1px solid #dde3ec", fontSize: 11 }} />
           <Legend wrapperStyle={{ fontSize: 10 }} />
           {series.map((s, i) => (
             <Line key={s.key} dataKey={s.key} name={s.label} dot={false} isAnimationActive={false} stroke={PALETTE[i % PALETTE.length]} strokeDasharray={s.dashed ? "5 3" : undefined} strokeWidth={1.6} />
           ))}
-          {obs.length > 0 && <Scatter data={obs} dataKey="obs" name="observed / forecast" fill="#fff" shape="diamond" />}
+          {obs.length > 0 && <Scatter data={obs} dataKey="obs" name="observed / forecast" fill="#0b1f4b" shape="diamond" />}
           {limit && <ReferenceLine y={limit.value} stroke="#e74c3c" strokeDasharray="4 2" label={{ value: limit.label, fontSize: 9, fill: "#e74c3c", position: "insideTopRight" }} />}
           {now !== undefined && <ReferenceLine x={now} stroke="#ffd400" />}
         </ComposedChart>
@@ -72,7 +72,7 @@ export function SimpleLines({ rows, keys, height = 160 }: { rows: Record<string,
   return (
     <ResponsiveContainer width="100%" height={height}>
       <LineChart data={rows}>
-        <CartesianGrid strokeDasharray="3 3" stroke="#334" />
+        <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
         <XAxis dataKey="t" tick={{ fontSize: 10 }} />
         <YAxis tick={{ fontSize: 10 }} />
         <Tooltip />

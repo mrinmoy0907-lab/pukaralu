@@ -51,11 +51,11 @@ def features() -> list[dict]:
     fs = [
         # --- river and bathing --------------------------------------------
         F("river", "river", box(-500, -200, 500, 0), name="Synthetic river channel"),
-        F("bath_main", "bathing_area", box(-150, -12, 150, 0), name="Main Ghat bathing area", height_m=0),
+        F("bath_main", "bathing_area", box(-150, -12, 150, 0), name="Main Ghat bathing area", height_m=0, owner_department="Mela Administration"),
         F("bath_alt", "bathing_area", box(250, -10, 350, 0), name="Alternative Ghat B bathing area"),
-        F("ghat_main", "ghat", box(-150, 0, 150, 25), name="Main Ghat steps", surface="steps"),
+        F("ghat_main", "ghat", box(-150, 0, 150, 25), name="Main Ghat steps", surface="steps", owner_department="Mela Administration"),
         F("ghat_alt", "ghat", box(250, 0, 350, 20), name="Alternative Ghat B steps", surface="steps"),
-        F("plaza", "plaza", box(-150, 25, 150, 55), name="Ghat front plaza"),
+        F("plaza", "plaza", box(-150, 25, 150, 55), name="Ghat front plaza", owner_department="Municipal Corporation"),
         # --- built environment ---------------------------------------------
         F("temple", "temple", box(-30, 62, 30, 100), name="Synthetic temple", height_m=18),
         F("bld_1", "building", box(-140, 70, -60, 110), name="Synthetic building 1", height_m=9),
@@ -65,13 +65,16 @@ def features() -> list[dict]:
         F("wall_w", "wall", LineString([(-150, 57), (-110, 57)]), name="Compound wall W", height_m=2.5),
         F("wall_c", "wall", LineString([(-90, 57), (-10, 57)]), name="Compound wall C", height_m=2.5),
         F("wall_e", "wall", LineString([(110, 57), (150, 57)]), name="Compound wall E", height_m=2.5),
-        F("barricade_1", "barricade", LineString([(-40, 30), (-40, 48)]), name="Queue barricade", height_m=1.1),
+        F("barricade_1", "barricade", LineString([(-40, 30), (-40, 44)]), name="Queue barricade", height_m=1.1),
+        # market stalls along the back of the plaza (obstructions)
+        *[F(f"stall_{i + 1}", "obstacle", box(x, 47, x + 8, 51), name=f"Stall {i + 1}", obstruction_type="stall", height_m=3)
+          for i, x in enumerate((-130, -80, -30, 20, 70, 112))],
         # --- holding, transport, assembly ----------------------------------
-        F("hold_w", "holding_area", box(-260, 80, -180, 160), name="Holding Area West", capacity_persons=9000),
-        F("hold_e", "holding_area", box(180, 80, 260, 160), name="Holding Area East", capacity_persons=9000),
-        F("bus", "bus_terminal", box(-40, 400, 40, 460), name="Synthetic bus terminal"),
+        F("hold_w", "holding_area", box(-260, 80, -180, 160), name="Holding Area West", capacity_persons=9000, owner_department="Police Department"),
+        F("hold_e", "holding_area", box(180, 80, 260, 160), name="Holding Area East", capacity_persons=9000, owner_department="Police Department"),
+        F("bus", "bus_terminal", box(-40, 400, 40, 460), name="Synthetic bus terminal", owner_department="Transport Department"),
         F("parking", "parking", box(-420, 150, -340, 230), name="Synthetic parking area"),
-        F("assembly_w", "assembly_point", box(-400, 0, -332, 60), name="Assembly Point West"),
+        F("assembly_w", "assembly_point", box(-400, 0, -332, 60), name="Assembly Point West", owner_department="Fire & Emergency Services"),
         # --- corridors -----------------------------------------------------
         F("c_bus", "corridor", LineString([(0, 399), (0, 200)]), name="Bus terminal walkway", width_m=8),
         F("c_hw_north", "corridor", LineString([(0, 200), (-220, 200), (-220, 161)]), name="West holding approach", width_m=6),
